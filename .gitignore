@@ -1,0 +1,27 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Real-message samples never committed to public repo (see docs/sample-policy.md, Phase 0 S2)
+/samples/
+*.hex
+*.bin
+*.swift
+!samples/.gitkeep
+
+# Raw, unsanitized acquisition candidates — held local-only until sanitizer
+# round-trip-verifies them and promotes the redacted form into samples/.
+# See docs/sample-policy.md and tools/sample-sanitize/README.md.
+/candidates/
+
+# Standalone tool crates that are NOT workspace members keep their own target/.
+/tools/sample-sanitize/target/

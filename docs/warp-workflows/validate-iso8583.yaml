@@ -1,0 +1,27 @@
+name: Validate ISO 8583 Message (round-trip)
+command: |
+  wf parse --json {{hex}} | wf build | diff <(echo {{hex}} | tr -d ' \n') -
+tags:
+  - finance
+  - protocol
+  - iso8583
+  - wireforge
+  - validate
+description: |
+  Quick structural-validity check: parse the hex, re-build it, and
+  diff against the original. Exit code 0 = parser and builder are
+  exact inverses (message is canonical). Non-zero exit = either the
+  hex is unparseable or the message has non-canonical encoding.
+
+  NOTE: this only verifies WIRE STRUCTURE — it does NOT check PAN
+  Luhn, currency-code membership, or MAC integrity. Requires the
+  `wf` binary (`cargo install wf-cli`).
+source_url: https://github.com/wireforge/wireforge-core
+author: Wireforge Contributors
+author_url: https://github.com/wireforge
+shells: []
+arguments:
+  - name: hex
+    description: |
+      Hex-encoded ISO 8583 wire bytes (whitespace tolerated).
+    default_value: ""

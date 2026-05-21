@@ -1,0 +1,22 @@
+name: Parse ISO 8583 Message
+command: wf parse {{hex}}
+tags:
+  - finance
+  - protocol
+  - iso8583
+  - wireforge
+description: |
+  Parse a hex-encoded ISO 8583 financial message into a human-readable
+  field tree (MTI, bitmap, decoded fields). Whitespace in the hex is
+  ignored. Requires the `wf` binary from the `wf-cli` crate
+  (`cargo install wf-cli`).
+source_url: https://github.com/wireforge/wireforge-core
+author: Wireforge Contributors
+author_url: https://github.com/wireforge
+shells: []
+arguments:
+  - name: hex
+    description: |
+      Hex-encoded ISO 8583 wire bytes (whitespace tolerated). Use `-`
+      to read from stdin instead.
+    default_value: ""

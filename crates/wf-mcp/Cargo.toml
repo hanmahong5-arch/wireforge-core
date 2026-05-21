@@ -1,0 +1,41 @@
+[package]
+name = "wf-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge MCP server: exposes ISO 8583 parse/build/validate as Model Context Protocol tools."
+
+[[bin]]
+name = "wf-mcp"
+path = "src/bin/wf-mcp.rs"
+
+# rmcp 0.16's `#[tool_router]` procedural macro expands into code that
+# uses `.unwrap()` / `panic!` on schema-derive paths we don't control.
+# We forbid `unsafe_code` like the workspace; the three unwrap/panic
+# lints are relaxed only because of macro-generated code. Hand-written
+# handler code in this crate still goes through `Result<_, McpError>`.
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+unwrap_used = "allow"
+expect_used = "allow"
+panic = "allow"
+todo = "warn"
+dbg_macro = "warn"
+
+[dependencies]
+wf-bitmap = { path = "../wf-bitmap", version = "0.0.1" }
+wf-codec = { path = "../wf-codec", version = "0.0.1" }
+rmcp = { version = "0.16", features = ["server", "transport-io", "macros", "schemars"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"

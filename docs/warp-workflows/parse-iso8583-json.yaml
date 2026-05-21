@@ -1,0 +1,23 @@
+name: Parse ISO 8583 Message (JSON)
+command: wf parse --json {{hex}}
+tags:
+  - finance
+  - protocol
+  - iso8583
+  - wireforge
+  - json
+description: |
+  Parse a hex-encoded ISO 8583 financial message and emit a JSON
+  description (MTI, bitmap, fields with name + type + length). Pipe
+  the output into `jq` or any JSON-aware tool. Requires the `wf`
+  binary (`cargo install wf-cli`).
+source_url: https://github.com/wireforge/wireforge-core
+author: Wireforge Contributors
+author_url: https://github.com/wireforge
+shells: []
+arguments:
+  - name: hex
+    description: |
+      Hex-encoded ISO 8583 wire bytes (whitespace tolerated). Use `-`
+      to read from stdin instead.
+    default_value: ""

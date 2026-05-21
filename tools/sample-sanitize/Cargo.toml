@@ -1,0 +1,38 @@
+# Standalone crate — explicitly NOT a member of the wireforge-core workspace
+# at ../../Cargo.toml. Keeping this empty `[workspace]` table makes Cargo
+# treat the directory as its own workspace root (just this one package), so
+# `cargo test --workspace` in the parent never sees the tool, and edits to
+# the tool never trigger a parent rebuild.
+[workspace]
+
+[package]
+name = "sample-sanitize"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.90"
+license = "Apache-2.0"
+description = "Internal tool: redact and round-trip-verify ISO 8583 hex samples per docs/sample-policy.md. Not a workspace member, not published."
+publish = false
+
+[lib]
+name = "sample_sanitize"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sample-sanitize"
+path = "src/main.rs"
+
+[dependencies]
+# Use wf-codec parser/builder as the round-trip oracle. Path dep — this crate
+# tracks the workspace, but lives outside the workspace members list so it
+# does not pollute `cargo test --workspace`.
+wf-codec = { path = "../../crates/wf-codec" }
+sha2 = "0.10"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

@@ -1,0 +1,12 @@
+[package]
+name = "wf-bitmap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "ISO 8583 primary + secondary bitmap encode / decode."
+
+[lints]
+workspace = true

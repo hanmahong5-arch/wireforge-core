@@ -1,0 +1,12 @@
+[package]
+name = "wf-wal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Append-only write-ahead log with CRC32-guarded records and crash-safe tail recovery."
+
+[lints]
+workspace = true

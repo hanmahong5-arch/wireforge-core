@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["crates/wf-bitmap", "crates/wf-cli", "crates/wf-codec", "crates/wf-mcp", "crates/wf-wal"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.90"
+license = "Apache-2.0"
+repository = "https://github.com/wireforge/wireforge-core"
+authors = ["Wireforge Contributors"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+dbg_macro = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

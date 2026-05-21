@@ -1,0 +1,23 @@
+[package]
+name = "wf-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge CLI: parse and build ISO 8583 financial messages."
+
+[[bin]]
+name = "wf"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+wf-bitmap = { path = "../wf-bitmap", version = "0.0.1" }
+wf-codec = { path = "../wf-codec", version = "0.0.1" }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

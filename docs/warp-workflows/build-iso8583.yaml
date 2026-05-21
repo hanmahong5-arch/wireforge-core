@@ -1,0 +1,26 @@
+name: Build ISO 8583 Message from JSON
+command: |
+  echo '{{json}}' | wf build
+tags:
+  - finance
+  - protocol
+  - iso8583
+  - wireforge
+description: |
+  Build an ISO 8583 wire message (emitted as a hex string) from a JSON
+  message description piped over stdin. The JSON shape is:
+
+    { "mti": "0200", "fields": { "3": "000000", "4": "000000010000" } }
+
+  Use a string payload for ASCII fields, or `{"hex":"..."}` for raw
+  binary fields (e.g. PIN block, MAC). Requires the `wf` binary
+  (`cargo install wf-cli`).
+source_url: https://github.com/wireforge/wireforge-core
+author: Wireforge Contributors
+author_url: https://github.com/wireforge
+shells: []
+arguments:
+  - name: json
+    description: |
+      JSON message description; see above for the expected shape.
+    default_value: '{"mti":"0200","fields":{"3":"000000"}}'
