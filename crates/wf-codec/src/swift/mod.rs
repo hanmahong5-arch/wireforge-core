@@ -34,7 +34,11 @@
 //! are fixed-position and trivially decoded once we have a typed
 //! application layer, but the structural parser does not need to know.
 
+pub mod fields;
+
 use std::collections::BTreeMap;
+
+pub use fields::{DecodeError, FieldSemantic, MtFieldDecoder};
 
 /// One parsed SWIFT MT message — a sparse map of block id → block content.
 ///
@@ -59,6 +63,19 @@ impl MtMessage {
     /// digits, no normalisation needed).
     pub fn field(&self, tag: &str) -> Option<&MtField> {
         self.text()?.iter().find(|f| f.tag == tag)
+    }
+
+    /// Look up a block-4 field and run the semantic decoder for its tag.
+    ///
+    /// Returns `None` if no field with that tag exists (so callers can
+    /// distinguish "absent" from "present-but-malformed"). The inner
+    /// `Result` carries the decoded [`FieldSemantic`] or a
+    /// [`DecodeError`] from the typed decoder; tags with no registered
+    /// decoder return `Ok(FieldSemantic::Raw(value))` rather than an
+    /// error, so the diff layer can fall back to string comparison.
+    pub fn decode_field(&self, tag: &str) -> Option<Result<FieldSemantic, DecodeError>> {
+        let f = self.field(tag)?;
+        Some(fields::decode_field(&f.tag, &f.value))
     }
 }
 
