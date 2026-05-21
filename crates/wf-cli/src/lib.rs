@@ -249,6 +249,9 @@ fn display_parse(e: &ParseError) -> String {
         ParseError::InvalidBitmapHex { offset, byte } => format!(
             "FullAscii bitmap: byte {byte:#x} at offset {offset} is not a hex digit"
         ),
+        ParseError::InvalidBcdNibble { offset, byte } => format!(
+            "FullBinary: byte {byte:#x} at offset {offset} has a nibble outside 0..=9"
+        ),
     }
 }
 
@@ -274,6 +277,9 @@ fn display_build(e: &BuildError) -> String {
             prefix_digits,
         } => format!("field {field}: length {actual} cannot fit in {prefix_digits} digit prefix"),
         BuildError::BitmapError(b) => format!("bitmap: {b:?}"),
+        BuildError::InvalidBcdDigit { field, byte } => format!(
+            "field {field}: Numeric payload byte {byte:#x} is not an ASCII digit (cannot BCD-pack)"
+        ),
     }
 }
 

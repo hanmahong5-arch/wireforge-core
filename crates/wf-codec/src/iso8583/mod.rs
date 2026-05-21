@@ -2,6 +2,7 @@
 //! field type table and `wf-bitmap`. See [`Dialect`] for the supported
 //! wire flavours.
 
+pub mod bcd;
 pub mod builder;
 pub mod dialect;
 pub mod field;

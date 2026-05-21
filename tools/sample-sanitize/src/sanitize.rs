@@ -56,6 +56,18 @@ pub enum SanitizeError {
     /// Output byte length differs from input. The policy (`sample-policy.md`
     /// line 47) requires byte-identical framing post-redaction.
     LengthChanged { before: usize, after: usize },
+    /// Input dialect requires a redaction strategy this build does not
+    /// implement yet. Today this only fires on `FullBinary` + field 2
+    /// (PAN) — masking with ASCII `'X'` bytes would violate the BCD
+    /// nibble invariant (every nibble must be `0..=9`). A future sprint
+    /// adds a BCD-aware redactor (decode to ASCII digits → mask middle
+    /// 6 → re-encode as zero digits); until then we reject loudly rather
+    /// than silently produce a different field byte length.
+    UnsupportedDialect {
+        dialect: Dialect,
+        field: u8,
+        hint: &'static str,
+    },
 }
 
 impl core::fmt::Display for SanitizeError {
@@ -67,6 +79,14 @@ impl core::fmt::Display for SanitizeError {
             SanitizeError::LengthChanged { before, after } => {
                 write!(f, "byte length changed: {before} -> {after}")
             }
+            SanitizeError::UnsupportedDialect {
+                dialect,
+                field,
+                hint,
+            } => write!(
+                f,
+                "dialect {dialect:?} + field {field} redaction not implemented: {hint}"
+            ),
         }
     }
 }
@@ -94,6 +114,22 @@ impl From<BuildError> for SanitizeError {
 /// closes that hole.
 pub fn sanitize(input: &[u8]) -> Result<Sanitized, SanitizeError> {
     let (mut msg, dialect) = parse_any(input)?;
+
+    // FullBinary + field 2 PAN: the redactor emits ASCII 'X' bytes which
+    // are not BCD-valid (high nibble 5, low nibble 8 — both ≤ 9 but they
+    // decode to digits "58", not 'X'). Rebuilding via `build_with` would
+    // also fail since `bcd::encode_bcd` only accepts ASCII digit bytes.
+    // Pre-emptive reject gives a clearer message than the eventual build
+    // error and avoids leaving partial state behind.
+    if dialect == Dialect::FullBinary && msg.fields.contains_key(&2) {
+        return Err(SanitizeError::UnsupportedDialect {
+            dialect,
+            field: 2,
+            hint: "BCD redaction not implemented; decode to ASCII first \
+                   or use a BCD-aware masking strategy in a future revision",
+        });
+    }
+
     let mut fields_redacted = Vec::new();
     let mut anonymity_set_size: u128 = 0;
 
@@ -315,6 +351,56 @@ mod tests {
         // Truncated bitmap → parse error.
         let garbage = b"0200abcd";
         assert!(matches!(sanitize(garbage), Err(SanitizeError::Parse(_))));
+    }
+
+    #[test]
+    fn sanitize_rejects_full_binary_pan_with_explicit_hint() {
+        // Build the same logical PAN message in FullBinary — the redactor
+        // can't emit 'X' nibbles into BCD without violating the spec, so the
+        // sanitizer must reject loudly with a UnsupportedDialect error
+        // rather than silently produce a corrupted PAN or unequal length.
+        let mut fields: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
+        fields.insert(2, b"4111111111111111".to_vec());
+        let msg = Iso8583Message {
+            mti: *b"0200",
+            fields,
+        };
+        let wire = build_with(&msg, Dialect::FullBinary).expect("FullBinary build must succeed");
+
+        let err = sanitize(&wire).expect_err("FullBinary + field 2 must reject");
+        match err {
+            SanitizeError::UnsupportedDialect {
+                dialect,
+                field,
+                hint,
+            } => {
+                assert_eq!(dialect, Dialect::FullBinary);
+                assert_eq!(field, 2);
+                assert!(!hint.is_empty(), "hint must not be empty");
+            }
+            other => panic!("expected UnsupportedDialect, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sanitize_accepts_full_binary_without_field_2() {
+        // FullBinary with a non-PAN-only field set is still serviceable —
+        // only field 2 carries the BCD masking incompatibility today.
+        let mut fields: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
+        fields.insert(3, b"000000".to_vec());
+        fields.insert(4, b"000000010000".to_vec());
+        let msg = Iso8583Message {
+            mti: *b"0200",
+            fields,
+        };
+        let wire = build_with(&msg, Dialect::FullBinary).expect("FullBinary build must succeed");
+        let out = sanitize(&wire).expect("FullBinary without field 2 must sanitize");
+        assert_eq!(out.dialect, Dialect::FullBinary);
+        assert!(
+            out.fields_redacted.is_empty(),
+            "nothing redactable was set; got {:?}",
+            out.fields_redacted
+        );
     }
 
     #[test]
