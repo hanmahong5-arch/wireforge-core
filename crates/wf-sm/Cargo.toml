@@ -1,0 +1,24 @@
+[package]
+name = "wf-sm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge bindings to China's GM/T cryptographic standards (SM2 / SM3 / SM4). MVP exposes SM3 only; SM2 / SM4 modules are extension points."
+
+[lints]
+workspace = true
+
+[dependencies]
+# smcrypto 0.3.1 — pure-Rust SM2 / SM3 / SM4 implementation, MIT-licensed,
+# zhuobie/smcrypto on GitHub. Chosen over nfjBill/rust-gmsm (also published
+# as `gmsm` on crates.io) for the newer revision count and the simpler
+# call surface; the migration path between the two is symmetric since
+# both expose top-level free functions plus a streaming Sm3 struct, so a
+# future swap is a search-and-replace, not an API redesign. The decision
+# log lives in docs/sm-crypto-research-2026-05.md § Selection.
+smcrypto = "0.3"
+
+[dev-dependencies]
