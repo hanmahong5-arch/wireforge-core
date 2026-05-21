@@ -1,0 +1,21 @@
+// Sample .wf file: ISO 8583 authorization request (MTI 0200).
+//
+// Values are illustrative test data, NOT real cardholder data:
+// - PAN "4242424242424242" is the public Stripe test card number.
+// - Amount, dates, STAN are zeros for clarity.
+
+meta {
+  name: Auth Request 0200
+  type: iso8583
+  seq: 1
+  source: example
+}
+
+iso8583 {
+  mti: 0200
+  field 2: 4242424242424242
+  field 3: 000000
+  field 4: 000000010000
+  field 7: 1130120000
+  field 11: 000001
+}

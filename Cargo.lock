@@ -1006,6 +1006,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "wf-format"
+version = "0.0.1"
+
+[[package]]
 name = "wf-mcp"
 version = "0.0.1"
 dependencies = [

@@ -1,0 +1,14 @@
+[package]
+name = "wf-format"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Parser for the Wireforge `.wf` flat-file format — Bruno-inspired DSL for capturing ISO 8583 / SWIFT MT message specifications under Git."
+
+[lints]
+workspace = true
+
+[dependencies]

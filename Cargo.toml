@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/wf-bitmap", "crates/wf-cli", "crates/wf-codec", "crates/wf-mcp", "crates/wf-sm", "crates/wf-wal"]
+members = ["crates/wf-bitmap", "crates/wf-cli", "crates/wf-codec", "crates/wf-format", "crates/wf-mcp", "crates/wf-sm", "crates/wf-wal"]
 
 [workspace.package]
 version = "0.0.1"

@@ -1,0 +1,24 @@
+// Sample .wf file: SWIFT MT103 customer credit transfer skeleton.
+//
+// Values are illustrative; the BIC codes mirror the test BIC pattern
+// "XYZBANKBB" and account numbers are sequential digits.
+
+meta {
+  name: MT103 Cross-Border
+  type: swift-mt
+}
+
+swift-mt {
+  block 1: F01BANKBEBBAXXX1234567890
+  block 2: I103BANKDEFFXXXXN
+  block 3: {108:MYREF12345}
+
+  block 4 {
+    field 20: REFERENCE001
+    field 23B: CRED
+    field 32A: 240520USD1000,00
+    field 71A: SHA
+  }
+
+  block 5: {MAC:12345678}{CHK:ABCDEF123456}
+}
