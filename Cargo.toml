@@ -7,7 +7,7 @@ version = "0.0.1"
 edition = "2021"
 rust-version = "1.90"
 license = "Apache-2.0"
-repository = "https://github.com/wireforge/wireforge-core"
+repository = "https://github.com/hanmahong5-arch/wireforge-core"
 authors = ["Wireforge Contributors"]
 
 [workspace.lints.rust]

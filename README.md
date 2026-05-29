@@ -25,7 +25,25 @@ that redacts PAN / track data from real ISO 8583 hex samples; see
 [`docs/sample-policy.md`](docs/sample-policy.md) for the redaction
 contract.
 
-## Quick start (CLI)
+## 5-minute try
+
+No clone needed — install `wf` straight from the repo and parse one
+sample ISO 8583 frame:
+
+```bash
+cargo install --git https://github.com/hanmahong5-arch/wireforge-core wf-cli
+echo "303230302000000000000000303030303030" | wf parse -
+```
+
+You should see a tree with `MTI = 0200`, the bitmap, and field 3
+("Processing Code") decoded. If something looks off — wrong field, a
+crash, anything — please file an issue using the **feedback** template.
+Honest reports beat polished stars.
+
+Prebuilt binaries for Linux / macOS / Windows are attached to each
+[GitHub release](https://github.com/hanmahong5-arch/wireforge-core/releases).
+
+## Quick start (CLI from source)
 
 ```bash
 cargo install --path crates/wf-cli

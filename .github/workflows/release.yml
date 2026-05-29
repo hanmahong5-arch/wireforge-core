@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Build wf-cli release binary
+        run: cargo build --release --locked -p wf-cli --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          STAGE="wf-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir "$STAGE"
+          cp "target/${{ matrix.target }}/release/wf" "$STAGE/"
+          cp README.md LICENSE "$STAGE/" 2>/dev/null || cp README.md "$STAGE/"
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          shasum -a 256 "$STAGE.tar.gz" > "$STAGE.tar.gz.sha256"
+          echo "ASSET=$STAGE.tar.gz" >> "$GITHUB_ENV"
+          echo "ASSET_SHA=$STAGE.tar.gz.sha256" >> "$GITHUB_ENV"
+      - name: Package (windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          STAGE="wf-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir "$STAGE"
+          cp "target/${{ matrix.target }}/release/wf.exe" "$STAGE/"
+          cp README.md "$STAGE/" 2>/dev/null || true
+          cp LICENSE "$STAGE/" 2>/dev/null || true
+          7z a "$STAGE.zip" "$STAGE"
+          certutil -hashfile "$STAGE.zip" SHA256 | grep -v ':' | head -1 > "$STAGE.zip.sha256"
+          echo "ASSET=$STAGE.zip" >> "$GITHUB_ENV"
+          echo "ASSET_SHA=$STAGE.zip.sha256" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wf-${{ matrix.target }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET_SHA }}
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "wireforge-core ${GITHUB_REF_NAME}" \
+            --notes "Prebuilt wf CLI binaries for linux-x86_64, macos-aarch64, windows-x86_64. See README for install via cargo install --git." \
+            artifacts/*
