@@ -20,3 +20,21 @@ Four independent increments on top of `git init` baseline (5 commits).
 
 Gate per commit: cargo test + clippy `-D warnings` + fmt all green;
 manual smoke walked all 4 hands-on against spec vectors.
+
+## 2026-05-26 — v0.0.1 ship + remote + release (Goal A)
+
+Pushed to `hanmahong5-arch/wireforge-core` (public). README's `wireforge`
+org didn't exist + can't be CLI-created; chose personal account to
+unblock — can transfer later.
+
+- `fcc7a18` LICENSE (Apache-2.0, was missing despite README claim),
+  `.github/workflows/release.yml` (tag-triggered linux/macos-aarch64/
+  windows binary build), `.github/ISSUE_TEMPLATE/feedback.md`,
+  README "5-minute try" section, CI master branch trigger fix,
+  Cargo.toml repository URL.
+- Tag `v0.0.1` → Actions built 3 binaries + 3 sha256, release page
+  published with 6 assets.
+
+Acceptance verified: `cargo install --git <url> wf-cli` from /tmp
+shell installed wf v0.0.1, `wf parse` on README hex output MTI 0200
++ bitmap + field 3 correctly.
