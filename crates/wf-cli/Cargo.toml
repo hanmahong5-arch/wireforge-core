@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Wireforge CLI: parse and build ISO 8583 financial messages."
+keywords = ["iso8583", "cli", "fintech", "swift", "payments"]
+categories = ["command-line-utilities", "finance"]
 
 [[bin]]
 name = "wf"
@@ -16,8 +18,21 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-wf-bitmap = { path = "../wf-bitmap", version = "0.0.1" }
-wf-codec = { path = "../wf-codec", version = "0.0.1" }
+wf-bitmap = { path = "../wf-bitmap", version = "0.1.0" }
+wf-codec = { path = "../wf-codec", version = "0.1.0" }
+wf-sm = { path = "../wf-sm", version = "0.1.0" }
+wf-xform = { path = "../wf-xform", version = "0.1.0" }
+wf-mx = { path = "../wf-mx", version = "0.1.0" }
+wf-swift = { path = "../wf-swift", version = "0.1.0" }
+wf-format = { path = "../wf-format", version = "0.1.0" }
+wf-oracle = { path = "../wf-oracle", version = "0.1.0" }
+wf-obs = { path = "../wf-obs", version = "0.1.0" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
+tracing = "0.1"
+
+[dev-dependencies]
+# Integration tests name the engine's report / verdict / gate types directly.
+wf-oracle = { path = "../wf-oracle", version = "0.1.0" }

@@ -21,6 +21,10 @@ pub fn decode(s: &str) -> Result<Vec<u8>, String> {
         out.push((hi << 4) | lo);
         i += 2;
     }
+    // Single chokepoint for every hex-input tool: dump the decoded wire bytes
+    // at TRACE so the raw buffer can be inspected from any slice (à la
+    // Starring's `bcl_dump_buffer_trace`). No-op unless TRACE is enabled.
+    wf_obs::dump_buffer(tracing::Level::TRACE, "hex-input", &out);
     Ok(out)
 }
 
