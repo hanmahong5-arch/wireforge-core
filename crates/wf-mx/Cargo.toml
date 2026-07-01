@@ -1,0 +1,17 @@
+[package]
+name = "wf-mx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge ISO 20022 (MX) facade: typed parse/build/validate over a vetted CBPR+ message library, with Wireforge-owned error isolation."
+keywords = ["iso20022", "mx", "cbpr", "fintech", "parser"]
+categories = ["parser-implementations", "finance"]
+
+[lints]
+workspace = true
+
+[dependencies]
+mx-message = "=3.1.4"

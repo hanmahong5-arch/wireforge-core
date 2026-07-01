@@ -1,0 +1,17 @@
+[package]
+name = "wf-oracle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge deterministic wire-conformance EVIDENCE engine: compares a migrated system's captured response against a legacy capture, field-by-field, under an operator-approved mask, and emits coverage-metered regression-conformance EVIDENCE plus a 0/1/2 gate. It makes NO proof, certification, or equivalence claim."
+keywords = ["iso8583", "conformance", "regression", "fintech", "evidence"]
+categories = ["finance", "development-tools::testing"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wf-codec = { path = "../wf-codec", version = "0.1.0" }

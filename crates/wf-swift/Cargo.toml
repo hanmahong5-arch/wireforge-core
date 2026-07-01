@@ -1,0 +1,18 @@
+[package]
+name = "wf-swift"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge SWIFT MT facade: typed MT parse/build over a vetted parser, with a lossless structural fallback for unsupported message types."
+keywords = ["swift", "mt103", "fintech", "iso15022", "parser"]
+categories = ["parser-implementations", "finance"]
+
+[lints]
+workspace = true
+
+[dependencies]
+swift-mt-message = "=3.1.5"
+wf-codec = { path = "../wf-codec", version = "0.1.0" }

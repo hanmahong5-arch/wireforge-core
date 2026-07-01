@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/wf-bitmap", "crates/wf-cli", "crates/wf-codec", "crates/wf-format", "crates/wf-mcp", "crates/wf-sm", "crates/wf-wal"]
+members = ["crates/wf-bitmap", "crates/wf-cli", "crates/wf-codec", "crates/wf-format", "crates/wf-mcp", "crates/wf-mx", "crates/wf-obs", "crates/wf-oracle", "crates/wf-sm", "crates/wf-swift", "crates/wf-wal", "crates/wf-xform"]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 license = "Apache-2.0"

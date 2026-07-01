@@ -1,0 +1,19 @@
+[package]
+name = "wf-xform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Wireforge MT/MX field truncation & loss DETECTOR: compares an existing SWIFT MT and an existing ISO 20022 MX message for per-role field truncation or loss against cited standard max-lengths. It performs NO conversion and makes NO certification or equivalence claim."
+keywords = ["swift", "iso20022", "truncation", "fintech", "mt103"]
+categories = ["parser-implementations", "finance"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wf-swift = { path = "../wf-swift", version = "0.1.0" }
+wf-mx = { path = "../wf-mx", version = "0.1.0" }
+wf-codec = { path = "../wf-codec", version = "0.1.0" }
