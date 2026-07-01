@@ -1,0 +1,74 @@
+// SYNTHETIC — not production data.
+//
+// An ISO 8583 conformance EVIDENCE triple captured in one `.wf` file so a
+// single artifact can be checked by the conformance engine (via
+// `wf oracle check --wf <this file>`). It holds three role-tagged `iso8583`
+// blocks — the request and the two responses being compared — plus an
+// `oracle-spec` block of operator-approved masks.
+//
+// This is a Mode-A replay: the LEGACY response (captured from the system
+// being retired) and the MIGRATED response (from its replacement) to the same
+// 0200 request are diffed field-by-field. The mask spec encodes what may
+// legitimately differ:
+//   - DE11 (STAN) and DE7 (transmission date/time) are VOLATILE — they vary
+//     every run, so differences are normalised away, never counted as drift
+//     and never counted as verified.
+//   - DE52 (PIN/security data) is CRYPTO — re-derived by the migrated system,
+//     excluded from the value comparison.
+//   - DE63 (a private "response format version") is an INTENDED-DELTA — the
+//     migration intentionally bumps it from V1 to V2, so the migrated value
+//     must equal the approved V2 to be conformant.
+//   - everything else defaults to STABLE (fail closed): MTI, DE4 (amount) and
+//     DE39 (response code) must be byte-identical.
+//
+// As filled below the migration is conformant (gate 0): every stable baseline
+// field matches, the intended delta is met, and only the volatile/crypto
+// fields differ. The output is EVIDENCE of regression-conformance under this
+// capture — NOT a proof, certification, or equivalence claim.
+
+meta {
+  name: ISO 8583 0200/0210 conformance triple
+  type: oracle
+  seq: 1
+}
+
+iso8583 {
+  role: req
+  mti: 0200
+  field 3: 000000
+  field 4: 000000010000
+  field 7: 0626120000
+  field 11: 100001
+  field 52: PINBLOK0
+}
+
+iso8583 {
+  role: legacy
+  mti: 0210
+  field 4: 000000010000
+  field 7: 0626120000
+  field 11: 100001
+  field 39: 00
+  field 52: MAC1RESP
+  field 63: V1
+}
+
+iso8583 {
+  role: migrated
+  mti: 0210
+  field 4: 000000010000
+  field 7: 0626120042
+  field 11: 200042
+  field 39: 00
+  field 52: MAC2RESP
+  field 63: V2
+}
+
+oracle-spec {
+  interface: iso8583
+  default: stable
+  field 7: volatile
+  field 11: volatile
+  field 52: crypto
+  field 63: intended-delta V2
+}

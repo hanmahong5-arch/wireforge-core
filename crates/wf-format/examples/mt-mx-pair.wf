@@ -1,0 +1,37 @@
+// SYNTHETIC — not production data.
+//
+// A matched MT103 + pacs.008.001.08 pair captured in one `.wf` file so a
+// single artifact can be diffed by the MT/MX truncation detector (via
+// `wf xform diff --wf <this file>` or the MCP `wf_mt_mx_truncation_diff`
+// tool with a `wf` argument).
+//
+// The debtor name is engineered to demonstrate truncation: the MT 50K
+// field caps at 4*35 = 140 characters, while the MX <Dbtr><Nm> below
+// carries 141 characters (the same 140-char name plus one trailing `Z`).
+// The detector therefore reports the debtor role as `truncated` with the
+// single trailing `Z` as the lost suffix. The MX envelope `xml:` value is
+// opaque to `.wf` and MUST stay on a single line.
+
+meta {
+  name: MT103 + pacs.008 matched pair
+  type: pair
+  seq: 1
+}
+
+swift-mt {
+  block 1: F01BANKUS33AXXX0000000000
+  block 2: I103BANKGB22XXXXN
+
+  block 4 {
+    field 20: REF-PAIR-001
+    field 23B: CRED
+    field 32A: 240115USD1234,56
+    field 50K: ACME GLOBAL MANUFACTURING AND LOGISTICS CORPORATION INTERNATIONAL HOLDINGS GROUP LIMITED LIABILITY PARTNERSHIP TREASURY SETTLEMENT DESK ABCD
+    field 59: JANE SMITH
+    field 71A: OUR
+  }
+}
+
+mx {
+  xml: <?xml version="1.0" encoding="UTF-8"?><Envelope><AppHdr><Fr><FIId><FinInstnId><BICFI>BANKUS33XXX</BICFI></FinInstnId></FIId></Fr><To><FIId><FinInstnId><BICFI>BANKGB22XXX</BICFI></FinInstnId></FIId></To><BizMsgIdr>MSG-PAIR-001</BizMsgIdr><MsgDefIdr>pacs.008.001.08</MsgDefIdr><BizSvc>swift.cbprplus.02</BizSvc><CreDt>2024-01-15T09:00:00+00:00</CreDt></AppHdr><Document><FIToFICstmrCdtTrf><GrpHdr><MsgId>PAIR-PAY-001</MsgId><CreDtTm>2024-01-15T09:00:00+00:00</CreDtTm><NbOfTxs>1</NbOfTxs><SttlmInf><SttlmMtd>INDA</SttlmMtd></SttlmInf></GrpHdr><CdtTrfTxInf><PmtId><InstrId>INSTR-PAIR-001</InstrId><EndToEndId>E2E-PAIR-001</EndToEndId><UETR>00000000-0000-4000-8000-000000000001</UETR></PmtId><IntrBkSttlmAmt Ccy="USD">1234.56</IntrBkSttlmAmt><IntrBkSttlmDt>2024-01-15</IntrBkSttlmDt><ChrgBr>SHAR</ChrgBr><InstgAgt><FinInstnId><BICFI>BANKUS33XXX</BICFI></FinInstnId></InstgAgt><InstdAgt><FinInstnId><BICFI>BANKGB22XXX</BICFI></FinInstnId></InstdAgt><Dbtr><Nm>ACME GLOBAL MANUFACTURING AND LOGISTICS CORPORATION INTERNATIONAL HOLDINGS GROUP LIMITED LIABILITY PARTNERSHIP TREASURY SETTLEMENT DESK ABCDZ</Nm></Dbtr><DbtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></DbtrAcct><DbtrAgt><FinInstnId><BICFI>BANKUS33XXX</BICFI></FinInstnId></DbtrAgt><CdtrAgt><FinInstnId><BICFI>BANKGB22XXX</BICFI></FinInstnId></CdtrAgt><Cdtr><Nm>JANE SMITH</Nm></Cdtr><CdtrAcct><Id><IBAN>GB29NWBK60161331926819</IBAN></Id></CdtrAcct></CdtTrfTxInf></FIToFICstmrCdtTrf></Document></Envelope>
+}

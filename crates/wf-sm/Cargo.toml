@@ -7,18 +7,38 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Wireforge bindings to China's GM/T cryptographic standards (SM2 / SM3 / SM4). MVP exposes SM3 only; SM2 / SM4 modules are extension points."
+keywords = ["sm3", "sm2", "sm4", "crypto", "china"]
+categories = ["cryptography"]
 
 [lints]
 workspace = true
 
 [dependencies]
-# smcrypto 0.3.1 — pure-Rust SM2 / SM3 / SM4 implementation, MIT-licensed,
-# zhuobie/smcrypto on GitHub. Chosen over nfjBill/rust-gmsm (also published
-# as `gmsm` on crates.io) for the newer revision count and the simpler
-# call surface; the migration path between the two is symmetric since
-# both expose top-level free functions plus a streaming Sm3 struct, so a
-# future swap is a search-and-replace, not an API redesign. The decision
-# log lives in docs/sm-crypto-research-2026-05.md § Selection.
-smcrypto = "0.3"
+# sm3 0.5 — RustCrypto's SM3 (OSCCA GM/T 0004-2012) hash, dual-licensed
+# MIT OR Apache-2.0. Replaces the earlier `smcrypto 0.3` choice: that
+# crate was selected in 2026-05 only because RustCrypto had not yet
+# published an SM3 crate (see docs/sm-crypto-research-2026-05.md
+# § 2026-05-29 reversal). RustCrypto's `sm3` implements the `Digest`
+# trait, so the streaming [`crate::sm3::Sm3`] hasher keeps real 64-byte
+# block state instead of buffering the whole payload, on the standard
+# `digest` API surface.
+sm3 = "0.5"
+
+# sm4 0.5 — RustCrypto's SM4 (GM/T 0002-2012, GB/T 32907-2016) block
+# cipher, dual-licensed MIT OR Apache-2.0. Exposes only the raw
+# BlockEncrypt/BlockDecrypt primitive via the re-exported `cipher`
+# traits; ECB/CBC chaining + PKCS#7 padding live in `crate::sm4`. The
+# `cipher` and `generic_array` types are reached through `sm4::cipher`
+# (re-exported), so no separate dependency is pinned. Unaudited — no
+# 密评 / GB/T 39786 compliance claim attaches.
+sm4 = "0.5"
+
+# sm2 0.13 — RustCrypto's SM2 (GM/T 0003-2012, GB/T 32918) curve. The
+# `dsa` feature provides the signing/verification scheme with automatic
+# ZA (identity) pre-hashing via SM3. SecretKey/PublicKey + the OS RNG
+# are reached through the re-exported `sm2::elliptic_curve`, so no
+# separate elliptic-curve or rand_core dependency is pinned. Unaudited —
+# functional only, no 密评 compliance claim (see crate::sm2 docs).
+sm2 = { version = "0.13", features = ["dsa"] }
 
 [dev-dependencies]

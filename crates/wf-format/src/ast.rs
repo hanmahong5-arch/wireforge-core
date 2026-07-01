@@ -1,10 +1,11 @@
 //! `.wf` file AST.
 //!
 //! The AST is intentionally shallow: each top-level `meta { ... }`,
-//! `iso8583 { ... }`, or `swift-mt { ... }` block lifts into a strongly
-//! typed variant of [`Body`], and everything else falls into
-//! [`Body::Raw`] so the parser never has to reject a file just because
-//! the protocol block is new.
+//! `iso8583 { ... }`, `swift-mt { ... }`, or `mx { ... }` block lifts
+//! into a strongly typed variant of [`Body`], and everything else falls
+//! into [`Body::Raw`] so the parser never has to reject a file just
+//! because the protocol block is new. A file may hold several payload
+//! bodies (e.g. a matched `swift-mt` + `mx` pair).
 //!
 //! Field maps use `BTreeMap` rather than insertion-ordered structures
 //! because:
@@ -30,10 +31,11 @@ pub struct WfFile {
     /// files with no `meta` block, so reaching this type guarantees
     /// presence.
     pub meta: Meta,
-    /// Optional payload block — `iso8583`, `swift-mt`, or an
-    /// unrecognised raw block. `None` if the file is meta-only (a
-    /// legitimate state for templates / skeletons).
-    pub body: Option<Body>,
+    /// Zero or more payload blocks — each an `iso8583`, `swift-mt`, `mx`,
+    /// or unrecognised raw block, kept in source order. Empty for a
+    /// meta-only file (a legitimate state for templates / skeletons); a
+    /// matched MT + MX pair file holds two (a `swift-mt` and an `mx`).
+    pub bodies: Vec<Body>,
 }
 
 /// `meta { ... }` block. Known keys (`name`, `type`, `seq`) are lifted
@@ -62,6 +64,8 @@ pub enum Body {
     Iso8583(Iso8583Body),
     /// `swift-mt { ... }` block.
     SwiftMt(SwiftMtBody),
+    /// `mx { ... }` block — an opaque ISO 20022 envelope.
+    Mx(MxBody),
     /// Any unrecognised top-level block kind. Holds the original block
     /// name plus its raw `key: value` entries so a diff layer can still
     /// compare two files that disagree only on extension blocks.
@@ -89,20 +93,57 @@ pub struct Iso8583Body {
 }
 
 /// `swift-mt { ... }` block. Mirrors the SWIFT wrapper structure: an
-/// optional set of opaque block strings (blocks 1, 2, 3, 5) plus a
-/// nested block 4 of `tag: value` fields.
+/// optional set of opaque block strings (blocks 1, 2, 3, and optionally a
+/// single-line block 4 and block 5) plus an optional nested block 4 of
+/// `tag: value` fields.
+///
+/// Block 4 has two mutually exclusive forms — a single-line
+/// `block 4: <value>` and a nested `block 4 { ... }` — and a file may use
+/// at most one of them. A file that supplies both is rejected at parse
+/// time (`DuplicateKey { key: "block 4" }`), so block 4 always has a
+/// single source of truth.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SwiftMtBody {
     /// Opaque block strings keyed by block id (`block 1: ...` →
-    /// `1 → "..."`). Block 4 is **not** stored here even if a
-    /// `block 4: ...` single-line form is used — the parser routes it
-    /// to [`SwiftMtBody::block_4`] instead.
+    /// `1 → "..."`). A single-line `block 4: ...` form is stored **here**
+    /// (keyed by id `4`); only the nested `block 4 { ... }` form is routed
+    /// to [`SwiftMtBody::block_4`]. The two block-4 forms are mutually
+    /// exclusive — a file using both is rejected.
     pub blocks: BTreeMap<u8, String>,
-    /// Block 4's nested `tag: value` entries (`field 32A: 240520...`).
-    /// `None` if no `block 4 { ... }` nested block appeared.
+    /// Block 4's nested `tag: value` entries (`field 32A: 240520...`),
+    /// populated only by the nested `block 4 { ... }` form. `None` if no
+    /// nested block 4 appeared (including when a single-line `block 4: ...`
+    /// was used instead — that lands in [`SwiftMtBody::blocks`]).
     pub block_4: Option<BTreeMap<String, String>>,
     /// All entries not matched by `block N` or `block 4 { … }`.
     pub extra: BTreeMap<String, String>,
+}
+
+/// `mx { ... }` block — an opaque ISO 20022 (MX) envelope.
+///
+/// `.wf` does **not** parse the XML: the `xml` key carries the whole
+/// `<AppHdr>` + `<Document>` envelope verbatim as a single string, and
+/// a downstream consumer (e.g. `wf-mx`) is responsible for interpreting
+/// it. Mirrors [`RawBody`]'s "carry, don't validate" stance.
+///
+/// # Single-line constraint
+///
+/// The value **must be a single line** with no `{` / `}` characters. The
+/// `.wf` lexer reads a value as the rest of one line (breaking at a `}`
+/// seen at brace depth 0), so an XML envelope — which uses `<` / `>`, not
+/// braces — round-trips intact only when emitted on one line. Multi-line
+/// XML or XML containing literal braces is out of scope for this MVP.
+///
+/// The value carries `//` (e.g. `http://` namespace URIs) verbatim, but it
+/// must **not** contain the C-style block-comment delimiters `/*` or `*/`:
+/// those are removed by the whole-source `strip_block_comments` pre-pass
+/// that runs before lexing. ISO 20022 XML uses `<!-- -->`, never `/* */`,
+/// so this is a documented non-issue in practice.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MxBody {
+    /// The opaque, single-line ISO 20022 envelope XML (the `xml:` key's
+    /// value). Empty if no `xml:` key was present.
+    pub xml: String,
 }
 
 /// Fall-through container for unrecognised top-level block kinds.

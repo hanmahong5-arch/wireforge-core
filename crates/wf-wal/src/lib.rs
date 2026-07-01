@@ -353,6 +353,12 @@ impl Wal {
     /// fsynced; subsequent appends start at `offset`.
     ///
     /// `offset < MAGIC.len()` is rejected (would destroy the header).
+    ///
+    /// `offset` must land on a record boundary: pass either `MAGIC.len()`
+    /// (reset to an empty WAL) or a value previously returned by
+    /// [`Wal::append`]. A mid-record offset shrinks the file to a point the
+    /// reader cannot frame, so the next [`Wal::read_all`] surfaces a corrupt
+    /// tail.
     pub fn truncate_to(&mut self, offset: u64) -> Result<(), WalError> {
         if offset < MAGIC.len() as u64 {
             return Err(WalError::Io(io::Error::new(
@@ -368,8 +374,11 @@ impl Wal {
         }
         self.file.set_len(offset)?;
         self.file.sync_all()?;
-        self.file.seek(SeekFrom::End(0))?;
+        // Record the new end BEFORE the seek: the file is already shorter on
+        // disk, so a (typed-fallible) seek error must not leave `end_offset`
+        // pointing past it — that would desync every later append.
         self.end_offset = offset;
+        self.file.seek(SeekFrom::End(0))?;
         Ok(())
     }
 }

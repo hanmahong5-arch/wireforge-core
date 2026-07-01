@@ -14,7 +14,8 @@
 
 use crate::iso8583::bcd;
 use crate::iso8583::dialect::Dialect;
-use crate::iso8583::field::{field_def, DataType, FieldDef, LengthSpec};
+use crate::iso8583::field::{DataType, LengthSpec};
+use crate::iso8583::spec::{FieldMeta, FieldSpec};
 use core::fmt;
 use std::collections::BTreeMap;
 use wf_bitmap::{Bitmap8583, BitmapError, PRIMARY_LEN, TOTAL_LEN};
@@ -156,9 +157,26 @@ pub fn parse_any(input: &[u8]) -> Result<(Iso8583Message, Dialect), ParseError> 
     Err(first_err.unwrap_or(ParseError::InsufficientBytes { offset: 0, need: 0 }))
 }
 
-/// Parse using a specific dialect. Use this when you already know the source
-/// system's wire convention (e.g. tests, audited captures).
+/// Parse using a specific dialect and the built-in ISO 8583-1987 field table.
+/// Use this when you already know the source system's wire convention (e.g.
+/// tests, audited captures). Equivalent to
+/// [`parse_with_spec`]`(input, dialect, FieldSpec::builtin())`.
 pub fn parse_with(input: &[u8], dialect: Dialect) -> Result<Iso8583Message, ParseError> {
+    parse_with_spec(input, dialect, FieldSpec::builtin())
+}
+
+/// Parse using a specific dialect and a caller-supplied [`FieldSpec`].
+///
+/// This is the runtime-configurable entry point: pass a spec built with
+/// [`FieldSpec::extending_builtin`] or [`FieldSpec::closed`] to parse a
+/// national / private dialect whose field definitions differ from the
+/// built-in table. With [`FieldSpec::builtin`] it is byte-for-byte identical
+/// to [`parse_with`].
+pub fn parse_with_spec(
+    input: &[u8],
+    dialect: Dialect,
+    spec: &FieldSpec,
+) -> Result<Iso8583Message, ParseError> {
     // 1. MTI — width and encoding both depend on dialect.
     let (mti, mti_bytes) = read_mti(input, dialect)?;
     let mut offset = mti_bytes;
@@ -172,12 +190,12 @@ pub fn parse_with(input: &[u8], dialect: Dialect) -> Result<Iso8583Message, Pars
     let mut fields: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
     for field_u16 in bitmap.iter_set_fields() {
         let n: u8 = u8::try_from(field_u16).map_err(|_| ParseError::UnknownField(0))?;
-        let def = field_def(n).ok_or(ParseError::UnknownField(n))?;
+        let meta = spec.lookup(n).ok_or(ParseError::UnknownField(n))?;
 
-        let (logical_len, prefix_len) = read_length(input, offset, dialect, def)?;
+        let (logical_len, prefix_len) = read_length(input, offset, dialect, &meta)?;
         offset += prefix_len;
 
-        let wire_len = field_wire_bytes(def.data_type, logical_len, dialect);
+        let wire_len = field_wire_bytes(meta.data_type, logical_len, dialect);
         let data_end = offset
             .checked_add(wire_len)
             .ok_or(ParseError::InsufficientBytes {
@@ -191,7 +209,7 @@ pub fn parse_with(input: &[u8], dialect: Dialect) -> Result<Iso8583Message, Pars
             });
         }
         let raw = &input[offset..data_end];
-        let payload = decode_field_payload(raw, def.data_type, logical_len, dialect, offset)?;
+        let payload = decode_field_payload(raw, meta.data_type, logical_len, dialect, offset)?;
         fields.insert(n, payload);
         offset = data_end;
     }
@@ -263,15 +281,15 @@ fn read_length(
     input: &[u8],
     offset: usize,
     dialect: Dialect,
-    def: &FieldDef,
+    meta: &FieldMeta,
 ) -> Result<(usize, usize), ParseError> {
-    match def.length {
+    match meta.length {
         LengthSpec::Fixed(n) => Ok((n, 0)),
         LengthSpec::LLVAR { max } => {
-            let (l, prefix) = read_var_len(input, offset, dialect, 2, def.number)?;
+            let (l, prefix) = read_var_len(input, offset, dialect, 2, meta.number)?;
             if l > max {
                 return Err(ParseError::LengthExceedsMax {
-                    field: def.number,
+                    field: meta.number,
                     decoded: l,
                     max,
                 });
@@ -279,10 +297,10 @@ fn read_length(
             Ok((l, prefix))
         }
         LengthSpec::LLLVAR { max } => {
-            let (l, prefix) = read_var_len(input, offset, dialect, 3, def.number)?;
+            let (l, prefix) = read_var_len(input, offset, dialect, 3, meta.number)?;
             if l > max {
                 return Err(ParseError::LengthExceedsMax {
-                    field: def.number,
+                    field: meta.number,
                     decoded: l,
                     max,
                 });

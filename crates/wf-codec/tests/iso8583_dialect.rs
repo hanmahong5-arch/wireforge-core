@@ -2,8 +2,9 @@
 //!
 //! Vectors are hand-constructed against the spec convention as observed in
 //! the public OSS corpus (jpos `ISO87A`/`ISO93A` packagers, moov-io Go test
-//! literals). Per CLAUDE.md §4.1 ③ "measurement and subject must not share
-//! a source", these vectors are NOT regenerated from `build_with` and then
+//! literals). Per the project's test-independence policy ("measurement and
+//! subject must not share a source"), these vectors are NOT regenerated from
+//! `build_with` and then
 //! fed back to `parse_with` in the same test — the wire bytes are written
 //! out longhand so a parser regression that re-encodes wrong is detected
 //! against the spec, not against itself.
@@ -205,8 +206,9 @@ fn sniff_no_match_returns_first_dialect_error() {
 //
 // Vectors are hand-constructed against the jpos `ISO87BPackager` convention
 // (2-byte BCD MTI, raw-binary bitmap, BCD length prefixes, BCD-packed Numeric
-// payloads, raw bytes for non-numeric data types). Per CLAUDE.md §4.1 ③ none
-// of these are regenerated from `build_with(FullBinary)` then fed back to
+// payloads, raw bytes for non-numeric data types). Per the project's
+// test-independence policy, none of these are regenerated from
+// `build_with(FullBinary)` then fed back to
 // `parse_with(FullBinary)` — the wire bytes are written longhand so a parser
 // regression that re-encodes wrong is detected against the spec convention,
 // not against itself.

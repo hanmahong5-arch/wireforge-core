@@ -5,8 +5,8 @@
 //! implementation against the spec rather than against itself.
 //!
 //! Bitmap math (recomputed by hand for every vector, never copied from the
-//! parser output, per CLAUDE.md §4.1 ③ "measurement and subject must not
-//! share a source"):
+//! parser output, per the project's test-independence policy ("measurement
+//! and subject must not share a source"):
 //!
 //!   field N --> byte (N-1)/8, bit mask 1 << (7 - (N-1)%8)
 //!
@@ -312,5 +312,41 @@ fn build_unknown_or_invalid_field_number() {
             BuildError::UnknownField(200) | BuildError::InvalidFieldNumber(200)
         ),
         "expected UnknownField(200) or InvalidFieldNumber(200), got {err:?}",
+    );
+}
+
+/// D6. Builder rejects field 1 (secondary-bitmap indicator). Supplying field 1
+/// would set bit 0x80 and emit 8 payload bytes, but encode() clears 0x80 when
+/// no field > 64 is present; re-parsing would then mis-frame subsequent fields.
+/// Rejection prevents the round-trip corruption.
+#[test]
+fn build_rejects_field_1_secondary_bitmap_indicator() {
+    // Field 1 with 8 bytes (the secondary-bitmap size) — structurally
+    // plausible but semantically forbidden.
+    let m = msg(
+        b"0200",
+        &[
+            (1, b"\x00\x00\x00\x00\x00\x00\x00\x00"),
+            (2, b"4111111111111111"),
+        ],
+    );
+    let err = build(&m).expect_err("field 1 must be rejected");
+    assert_eq!(
+        err,
+        BuildError::InvalidFieldNumber(1),
+        "expected InvalidFieldNumber(1) for the auto-managed secondary-bitmap indicator",
+    );
+}
+
+/// D7. Builder rejects field number 200, which fits in a u8 but is > 128.
+/// Combined with D6 this covers the full combined guard (n == 0 || n == 1 || n > 128).
+#[test]
+fn build_rejects_field_number_above_128() {
+    let m = msg(b"0200", &[(200, b"x")]);
+    let err = build(&m).expect_err("field 200 must be rejected");
+    assert_eq!(
+        err,
+        BuildError::InvalidFieldNumber(200),
+        "expected InvalidFieldNumber(200) for out-of-range field",
     );
 }

@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Append-only write-ahead log with CRC32-guarded records and crash-safe tail recovery."
+keywords = ["wal", "write-ahead-log", "crc32", "crash-safe", "durability"]
+categories = ["data-structures", "filesystem"]
 
 [lints]
 workspace = true

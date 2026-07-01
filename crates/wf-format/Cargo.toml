@@ -7,8 +7,13 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Parser for the Wireforge `.wf` flat-file format — Bruno-inspired DSL for capturing ISO 8583 / SWIFT MT message specifications under Git."
+keywords = ["iso8583", "swift", "dsl", "parser", "fintech"]
+categories = ["parser-implementations", "finance"]
 
 [lints]
 workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+proptest = "1"

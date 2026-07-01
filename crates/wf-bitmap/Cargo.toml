@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "ISO 8583 primary + secondary bitmap encode / decode."
+keywords = ["iso8583", "bitmap", "fintech", "payments", "codec"]
+categories = ["encoding", "finance"]
 
 [lints]
 workspace = true

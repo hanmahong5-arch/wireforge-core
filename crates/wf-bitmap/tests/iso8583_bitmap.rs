@@ -106,6 +106,17 @@ fn out_of_range_field_errors() {
 }
 
 #[test]
+fn field_1_secondary_indicator_is_rejected_not_silently_lost() {
+    // Field 1 is the secondary-bitmap-present indicator, managed by
+    // encode/decode. Accepting set(1) would store a bit those paths then
+    // clear, so the value would round-trip to false with no error. It must
+    // be rejected at the API instead of silently swallowed.
+    let mut bm = Bitmap8583::new();
+    assert_eq!(bm.set(1), Err(BitmapError::FieldOutOfRange(1)));
+    assert_eq!(bm.is_set(1), Err(BitmapError::FieldOutOfRange(1)));
+}
+
+#[test]
 fn decode_rejects_too_short_input() {
     assert_eq!(
         Bitmap8583::decode(&[0u8; 4]),

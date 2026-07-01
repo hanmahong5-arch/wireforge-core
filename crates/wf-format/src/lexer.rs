@@ -147,7 +147,15 @@ impl<'a> Lexer<'a> {
             c if c.is_ascii_digit() => Ok(self.lex_number_or_alnum()),
             c => Err(LexError::UnexpectedChar {
                 offset: self.pos,
-                ch: c as char,
+                // Decode the real Unicode scalar at this position so the
+                // error message reports the actual character, not a
+                // Latin-1 re-encoding of the first byte of a multibyte
+                // sequence. Falls back to the raw byte if somehow the
+                // slice is empty (unreachable in practice).
+                ch: self.src[self.pos..]
+                    .chars()
+                    .next()
+                    .unwrap_or_else(|| char::from(c)),
             }),
         }
     }
@@ -216,6 +224,55 @@ impl<'a> Lexer<'a> {
         // so the parser sees end-of-entry. A `}` terminator is left in
         // place — the enclosing block parser handles it on its next
         // `next_token` call.
+        if self.pos < self.bytes.len() && matches!(self.bytes[self.pos], b'\n' | b'\r') {
+            self.consume_line_break();
+            self.pending_newline = true;
+        }
+        value
+    }
+
+    /// Opaque value reader: identical to [`Lexer::read_value_until_newline`]
+    /// but does NOT treat `//` as a comment, so values that legitimately
+    /// contain `//` (e.g. an ISO 20022 envelope's `http://` namespace URI)
+    /// survive verbatim. Used for the `mx { xml: }` block, whose value the
+    /// format carries opaquely.
+    pub fn read_value_raw_until_newline(&mut self) -> String {
+        // Skip leading whitespace within the value.
+        while self.pos < self.bytes.len() {
+            let b = self.bytes[self.pos];
+            if b == b' ' || b == b'\t' {
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let start = self.pos;
+        let mut end = start;
+        let mut depth: i32 = 0;
+        while self.pos < self.bytes.len() {
+            let b = self.bytes[self.pos];
+            if b == b'\n' || b == b'\r' {
+                break;
+            }
+            if b == b'}' && depth == 0 {
+                break;
+            }
+            if b == b'{' {
+                depth += 1;
+            } else if b == b'}' {
+                depth -= 1;
+            }
+            self.pos += 1;
+            end = self.pos;
+        }
+        // Trim trailing whitespace.
+        while end > start && matches!(self.bytes[end - 1], b' ' | b'\t') {
+            end -= 1;
+        }
+        let value = self.src[start..end].to_string();
+        // Consume the line break (if any) and request a Newline next so the
+        // parser sees end-of-entry. A `}` terminator is left in place — the
+        // enclosing block parser handles it on its next `next_token` call.
         if self.pos < self.bytes.len() && matches!(self.bytes[self.pos], b'\n' | b'\r') {
             self.consume_line_break();
             self.pending_newline = true;
@@ -308,12 +365,29 @@ fn is_ident_cont(b: u8) -> bool {
 /// block comments are NOT supported — `/* /* */ */` will close at the
 /// first `*/` and leave ` */` as a stray fragment that the lexer will
 /// surface as an `UnexpectedChar`.
+///
+/// # UTF-8 correctness
+///
+/// The comment delimiters `/*`, `*/`, and `\n` are all single-byte
+/// ASCII sequences, so every boundary we scan for is guaranteed to lie
+/// on a UTF-8 char boundary. This lets us copy non-comment regions as
+/// `&str` slices rather than byte-by-byte, avoiding the `u8 as char`
+/// trap where each raw byte `n` is silently promoted to the Latin-1
+/// scalar U+00nn — which would turn the two-byte UTF-8 encoding of `é`
+/// (0xC3 0xA9) into `Ã©` (U+00C3 U+00A9), corrupting every non-ASCII
+/// input before the lexer ever sees it.
 pub fn strip_block_comments(input: &str) -> Result<String, LexError> {
     let mut out = String::with_capacity(input.len());
     let bytes = input.as_bytes();
     let mut i = 0;
+    // `run_start` tracks the beginning of the current non-comment run.
+    // When we hit a `/*` we flush [run_start..i] as a UTF-8 slice.
+    let mut run_start = 0;
     while i < bytes.len() {
         if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            // Flush the non-comment bytes seen since the last comment end.
+            // Because `/*` is ASCII, `i` is a valid char boundary here.
+            out.push_str(&input[run_start..i]);
             let start = i;
             i += 2;
             loop {
@@ -332,10 +406,13 @@ pub fn strip_block_comments(input: &str) -> Result<String, LexError> {
                 }
                 i += 1;
             }
+            // The next non-comment run starts here.
+            run_start = i;
         } else {
-            out.push(bytes[i] as char);
             i += 1;
         }
     }
+    // Flush any trailing non-comment bytes.
+    out.push_str(&input[run_start..i]);
     Ok(out)
 }

@@ -8,8 +8,9 @@
 
 use crate::iso8583::bcd;
 use crate::iso8583::dialect::Dialect;
-use crate::iso8583::field::{field_def, DataType, LengthSpec};
+use crate::iso8583::field::{DataType, LengthSpec};
 use crate::iso8583::parser::{field_wire_bytes, Iso8583Message};
+use crate::iso8583::spec::FieldSpec;
 use core::fmt;
 use wf_bitmap::{Bitmap8583, BitmapError};
 
@@ -18,7 +19,9 @@ use wf_bitmap::{Bitmap8583, BitmapError};
 pub enum BuildError {
     /// MTI bytes were not all ASCII digits `'0'..='9'`.
     InvalidMti([u8; 4]),
-    /// `fields` contained field number 0 or > 128.
+    /// `fields` contained field number 0, 1 (reserved secondary-bitmap
+    /// indicator — auto-managed by the encoder, must not be supplied by the
+    /// caller), or > 128 (outside the addressable bitmap range).
     InvalidFieldNumber(u8),
     /// [`field_def`] returned `None` for the field number. With the
     /// current table this implies field 0 (rejected separately) or a
@@ -59,7 +62,14 @@ impl fmt::Display for BuildError {
                 write!(f, "invalid MTI {:?}: not all ASCII digits", b)
             }
             BuildError::InvalidFieldNumber(n) => {
-                write!(f, "invalid field number {}: must be 1..=128", n)
+                write!(
+                    f,
+                    "invalid field number {}: must be 2..=128 \
+                     (0 is out of range; 1 is the auto-managed secondary-bitmap \
+                     indicator and must not be supplied by the caller; \
+                     >128 is outside the addressable bitmap range)",
+                    n
+                )
             }
             BuildError::UnknownField(n) => {
                 write!(f, "field {} has no FieldDef in the table", n)
@@ -123,6 +133,21 @@ pub fn build(msg: &Iso8583Message) -> Result<Vec<u8>, BuildError> {
 /// field's length prefix followed by its payload) but the encoding of both
 /// the prefix and the Numeric payload depends on dialect.
 pub fn build_with(msg: &Iso8583Message, dialect: Dialect) -> Result<Vec<u8>, BuildError> {
+    build_with_spec(msg, dialect, FieldSpec::builtin())
+}
+
+/// Encode an [`Iso8583Message`] in the specified dialect using a
+/// caller-supplied [`FieldSpec`].
+///
+/// The runtime-configurable counterpart to [`build_with`]: pass a spec built
+/// with [`FieldSpec::extending_builtin`] / [`FieldSpec::closed`] to emit a
+/// national / private dialect. With [`FieldSpec::builtin`] it is byte-for-byte
+/// identical to [`build_with`].
+pub fn build_with_spec(
+    msg: &Iso8583Message,
+    dialect: Dialect,
+    spec: &FieldSpec,
+) -> Result<Vec<u8>, BuildError> {
     // 1. MTI validation — the ASCII representation in `msg.mti` is the
     //    canonical form regardless of dialect; we only re-encode it on the
     //    wire side for `FullBinary`.
@@ -131,15 +156,22 @@ pub fn build_with(msg: &Iso8583Message, dialect: Dialect) -> Result<Vec<u8>, Bui
     }
 
     // 2. Build the bitmap from the field set. Pre-validate every field's
-    //    payload against its FieldDef BEFORE serialising so a bad field
-    //    doesn't leave us with a half-written buffer.
+    //    payload against its spec definition BEFORE serialising so a bad
+    //    field doesn't leave us with a half-written buffer.
     let mut bitmap = Bitmap8583::new();
     for (&n, data) in &msg.fields {
-        if n == 0 {
+        // n == 0  : not a valid ISO 8583 field number.
+        // n == 1  : secondary-bitmap indicator — auto-managed by the encoder;
+        //           a caller-supplied value would set bit 0x80 AND emit 8 payload
+        //           bytes, breaking the round-trip (encode() clears 0x80 when no
+        //           field > 64 is present; re-parse then skips field 1 and
+        //           mis-frames every subsequent field).
+        // n > 128 : outside the range a 16-byte bitmap can address.
+        if n == 0 || n == 1 || n > 128 {
             return Err(BuildError::InvalidFieldNumber(n));
         }
-        let def = field_def(n).ok_or(BuildError::UnknownField(n))?;
-        match def.length {
+        let meta = spec.lookup(n).ok_or(BuildError::UnknownField(n))?;
+        match meta.length {
             LengthSpec::Fixed(expected) => {
                 if data.len() != expected {
                     return Err(BuildError::FixedLengthMismatch {
@@ -205,20 +237,20 @@ pub fn build_with(msg: &Iso8583Message, dialect: Dialect) -> Result<Vec<u8>, Bui
 
     // BTreeMap iteration is ascending by key — matches ISO 8583 ordering.
     for (&n, data) in &msg.fields {
-        let def = match field_def(n) {
-            Some(d) => d,
+        let meta = match spec.lookup(n) {
+            Some(m) => m,
             None => return Err(BuildError::UnknownField(n)),
         };
-        match def.length {
+        match meta.length {
             LengthSpec::Fixed(_) => {}
             LengthSpec::LLVAR { .. } => write_var_len(&mut out, data.len(), 2, dialect),
             LengthSpec::LLLVAR { .. } => write_var_len(&mut out, data.len(), 3, dialect),
         }
-        write_field_payload(&mut out, data, def.data_type, dialect, n)?;
+        write_field_payload(&mut out, data, meta.data_type, dialect, n)?;
         // Sanity: emitted exactly `field_wire_bytes(...)` bytes for the
         // payload. If not, parse / build asymmetry would surface as a
         // round-trip failure — caught by the dialect tests.
-        let _wire = field_wire_bytes(def.data_type, data.len(), dialect);
+        let _wire = field_wire_bytes(meta.data_type, data.len(), dialect);
     }
 
     Ok(out)

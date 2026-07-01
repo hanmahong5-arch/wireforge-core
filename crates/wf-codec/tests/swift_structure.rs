@@ -181,11 +181,12 @@ fn block_4_tag_with_letters_only_parses() {
 
 #[test]
 fn round_trip_full_mt103_byte_exact() {
-    // Per CLAUDE.md §4.1 ③ "测量与被测不可同源" — the wire vector here is
-    // the same MT103_FULL constant fed into parse; build then verifies
-    // exact byte recovery. Because MT103_FULL is hand-written longhand
-    // (NOT regenerated from build()), this is parser-built-correctness
-    // verified against an externally-stated spec layout, not a tautology.
+    // Per the project's test-independence policy ("measurement and subject
+    // must not share a source") — the wire vector here is the same
+    // MT103_FULL constant fed into parse; build then verifies exact byte
+    // recovery. Because MT103_FULL is hand-written longhand (NOT
+    // regenerated from build()), this is parser-build correctness verified
+    // against an externally-stated spec layout, not a tautology.
     let msg = parse(MT103_FULL).unwrap();
     let rebuilt = build(&msg).unwrap();
     assert_eq!(rebuilt, MT103_FULL);
@@ -254,4 +255,125 @@ fn build_rejects_block_kind_id_mismatch() {
     blocks.insert(1u8, Block::Text(Vec::new()));
     let err = build(&MtMessage { blocks }).unwrap_err();
     assert_eq!(err, MtBuildError::InvalidBlockId { id: 1 });
+}
+
+// --- FIX C: sub-block tag validation (block 3 / 5) -----------------------
+
+/// A block-3 sub-block whose tag contains `:` would produce wire like
+/// `{3:{1:0:value}}`. The receiver parses this as tag="1", value="0:value" —
+/// the original tag "1:0" is lost. The builder must reject it.
+#[test]
+fn build_rejects_subblock_tag_with_colon() {
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        3u8,
+        Block::Tagged(vec![wf_codec::swift::MtSubBlock {
+            tag: "1:0".into(),
+            value: "SOMEREF".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::InvalidSubBlockTag { ref tag } if tag == "1:0"),
+        "expected InvalidSubBlockTag {{ tag: \"1:0\" }}, got {err:?}",
+    );
+}
+
+/// A block-5 sub-block tag containing `{` or `}` is likewise a wire delimiter
+/// and must be rejected.
+#[test]
+fn build_rejects_subblock_tag_with_braces() {
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        5u8,
+        Block::Tagged(vec![wf_codec::swift::MtSubBlock {
+            tag: "A{B".into(),
+            value: "VAL".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::InvalidSubBlockTag { .. }),
+        "expected InvalidSubBlockTag, got {err:?}",
+    );
+}
+
+// --- FIX D: block-4 field value misparse guards --------------------------
+
+/// A block-4 field value containing `\n:` would cause the receiver to split
+/// it into two fields. The builder must reject it.
+#[test]
+fn build_rejects_block4_value_with_newline_colon() {
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        4u8,
+        Block::Text(vec![MtField {
+            tag: "20".into(),
+            // The \n: sequence is the field-separator on the receiver side.
+            value: "PART1\n:FAKE_TAG".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::ValueWouldMisparse { ref tag } if tag == "20"),
+        "expected ValueWouldMisparse {{ tag: \"20\" }}, got {err:?}",
+    );
+}
+
+/// A block-4 field value with a line that is exactly `-` would collide with
+/// the block terminator and truncate the message on the receiver side.
+#[test]
+fn build_rejects_block4_value_with_lone_dash_line() {
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        4u8,
+        Block::Text(vec![MtField {
+            tag: "20".into(),
+            value: "FIRST LINE\n-\nTHIRD LINE".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::ValueWouldMisparse { ref tag } if tag == "20"),
+        "expected ValueWouldMisparse {{ tag: \"20\" }}, got {err:?}",
+    );
+}
+
+#[test]
+fn build_rejects_block4_value_with_brace() {
+    // A `{` in a block-4 value is a FIN brace delimiter: it would make the
+    // receiver's find_matching_brace consume the block-4 close, leaving the
+    // message unbalanced on re-parse. (Found by the round-trip proptest.)
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        4u8,
+        Block::Text(vec![MtField {
+            tag: "70".into(),
+            value: "INVOICE {123}".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::ValueWouldMisparse { ref tag } if tag == "70"),
+        "expected ValueWouldMisparse {{ tag: \"70\" }}, got {err:?}",
+    );
+}
+
+#[test]
+fn build_rejects_subblock_value_with_brace() {
+    // A `}` in a block-3/5 sub-block value would close the sub-block early
+    // and corrupt framing on re-parse.
+    let mut blocks = BTreeMap::new();
+    blocks.insert(
+        3u8,
+        Block::Tagged(vec![wf_codec::swift::MtSubBlock {
+            tag: "108".into(),
+            value: "REF}END".into(),
+        }]),
+    );
+    let err = build(&MtMessage { blocks }).unwrap_err();
+    assert!(
+        matches!(err, MtBuildError::ValueWouldMisparse { ref tag } if tag == "108"),
+        "expected ValueWouldMisparse {{ tag: \"108\" }}, got {err:?}",
+    );
 }

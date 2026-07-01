@@ -1,16 +1,22 @@
 //! Wireforge bindings to the China GM/T cryptographic standards
 //! (SM2 / SM3 / SM4).
 //!
-//! Scope of this crate is intentionally narrow today: only [`sm3`] is
-//! exposed. The `sm2` and `sm4` modules exist as named extension points
-//! (zero items right now) so adding signature / cipher support later is
-//! a one-file change in this crate rather than a workspace rearrangement.
+//! This crate exposes [`sm3`] (hash), [`sm4`] (block cipher, ECB/CBC
+//! with PKCS#7 plus a bounded streaming encryptor), and [`sm2`]
+//! (elliptic-curve digital signature). Each module is a thin,
+//! fixed-shape wrapper over the corresponding RustCrypto crate.
+//!
+//! The SM2 and SM4 upstreams are **unaudited**: these modules provide
+//! functional correctness only and carry **no** 密评 / GB/T 39786
+//! compliance claim. Compliance-grade GM/T crypto is a separate
+//! Tongsuo C-FFI route, not this crate.
 //!
 //! ## Why a Wireforge-owned wrapper
 //!
-//! Upstream crates (currently `smcrypto`; previously surveyed `gmsm`,
-//! pure-Rust RustCrypto plug-ins, and the C-FFI `Tongsuo` route — see
-//! `docs/sm-crypto-research-2026-05.md`) move at different paces and
+//! Upstream crates (currently the RustCrypto `sm3` crate; previously
+//! surveyed `smcrypto`, `gmsm`, and the C-FFI `Tongsuo` route — see
+//! `docs/sm-crypto-research-2026-05.md`, including the 2026-05-29
+//! reversal that moved SM3 onto RustCrypto) move at different paces and
 //! ship slightly different APIs. Re-exporting the upstream directly
 //! would couple every Wireforge call site to whichever crate today
 //! happens to be in the dependency graph. A thin wrapper:
@@ -21,24 +27,18 @@
 //! - gives us a single place to plug in compliance-relevant metadata
 //!   (algorithm OID, GB/T standard version) when Phase 2 lands.
 
+pub mod sm2;
 pub mod sm3;
-
-pub mod sm2 {
-    //! SM2 (elliptic-curve digital signature, key exchange) — extension
-    //! point.
-    //!
-    //! Empty in the MVP. The wrap-up is straightforward once a consumer
-    //! lands: re-export `smcrypto::sm2::Signer` / `Verifier` behind
-    //! types that take `&[u8]` byte slices and return owned signatures,
-    //! mirroring the [`super::sm3`] module's shape.
-}
-
-pub mod sm4 {
-    //! SM4 (128-bit block cipher) — extension point.
-    //!
-    //! Empty in the MVP. Wireforge's report-replay flows don't encrypt
-    //! payloads today; this slot is reserved for the Phase 2 wallet /
-    //! PIN-block path documented in the strategy memo.
-}
+pub mod sm4;
 
 pub use sm3::{sm3, sm3_hex, Sm3};
+
+pub use sm4::{
+    sm4_cbc_decrypt, sm4_cbc_encrypt, sm4_ecb_decrypt, sm4_ecb_encrypt, Sm4CbcEncryptor, Sm4Error,
+    SM4_BLOCK_LEN, SM4_KEY_LEN,
+};
+
+pub use sm2::{
+    sm2_verify, Sm2Error, Sm2KeyPair, Sm2Signature, SM2_DEFAULT_ID, SM2_PRIVATE_KEY_LEN,
+    SM2_SIGNATURE_RAW_LEN,
+};

@@ -7,9 +7,23 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Financial message codec: ISO 8583, SWIFT MT, EBCDIC."
+keywords = ["iso8583", "swift", "ebcdic", "fintech", "codec"]
+categories = ["encoding", "finance"]
 
 [lints]
 workspace = true
 
 [dependencies]
-wf-bitmap = { path = "../wf-bitmap", version = "0.0.1" }
+wf-bitmap = { path = "../wf-bitmap", version = "0.1.0" }
+# Runtime FieldSpec file loading is opt-in so the codec core stays
+# zero-dependency (only wf-bitmap) for callers that just use the built-in
+# table or build specs programmatically.
+serde = { version = "1", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
+
+[dev-dependencies]
+proptest = "1"
+
+[features]
+# Parse a `FieldSpec` from a TOML document (`FieldSpec::from_toml_str`).
+spec-load = ["dep:serde", "dep:toml"]

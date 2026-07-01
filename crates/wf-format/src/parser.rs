@@ -1,8 +1,9 @@
 //! Recursive-descent parser for the `.wf` flat-file format.
 //!
 //! See the [`crate`] module documentation for the grammar overview. In
-//! short, a file is a `meta { ... }` block followed by at most one
-//! payload block (`iso8583`, `swift-mt`, or an unrecognised raw block).
+//! short, a file is a `meta { ... }` block followed by zero or more
+//! payload blocks (`iso8583`, `swift-mt`, `mx`, or unrecognised raw
+//! blocks). A matched MT + MX pair file holds two payload blocks.
 //! Inside a block, each non-empty line is one of:
 //!
 //! - `key: value` — `value` runs from the `:` to end-of-line (trimmed).
@@ -15,7 +16,7 @@
 //! the [`crate::ast::RawBody`] catch-all so a future spec extension
 //! never has to round-trip through a parser change.
 
-use crate::ast::{Body, Iso8583Body, Meta, RawBody, SwiftMtBody, WfFile};
+use crate::ast::{Body, Iso8583Body, Meta, MxBody, RawBody, SwiftMtBody, WfFile};
 use crate::lexer::{strip_block_comments, LexError, Lexer, Tok};
 use core::fmt;
 use std::collections::BTreeMap;
@@ -28,17 +29,14 @@ pub enum ParseError {
     /// Top-level `meta { ... }` block was missing (every `.wf` file
     /// must declare one).
     MissingMeta,
-    /// Two `meta` blocks (or two payload blocks) appeared in one file.
+    /// Two `meta` blocks appeared in one file. Payload blocks may repeat
+    /// (a matched MT + MX pair has two), so only `meta` triggers this.
     DuplicateBlock { name: String },
     /// `}` appeared where a key was expected, but the matching block
     /// was never opened (more closes than opens).
     UnmatchedClose { offset: usize },
     /// Reached EOF before a `{` block was closed.
     UnclosedBlock { name: String },
-    /// `key: value` line was missing the colon between key and value
-    /// — typically caused by a typo like `key value` or a stray
-    /// identifier between two entries.
-    MissingColon { line_start: usize },
     /// Unexpected token in the position a key or block opener was
     /// expected. Carries a short label of what was expected for
     /// readable error messages.
@@ -64,10 +62,6 @@ impl fmt::Display for ParseError {
             ParseError::UnclosedBlock { name } => {
                 write!(f, "block `{name}` never closed before end of input")
             }
-            ParseError::MissingColon { line_start } => write!(
-                f,
-                "missing `:` between key and value on the line starting at offset {line_start}"
-            ),
             ParseError::UnexpectedToken { expected, got } => {
                 write!(f, "expected {expected}, got {got}")
             }
@@ -97,7 +91,7 @@ pub fn parse(input: &str) -> Result<WfFile, ParseError> {
     let stripped = strip_block_comments(input)?;
     let mut lex = Lexer::new(&stripped);
     let mut meta: Option<Meta> = None;
-    let mut body: Option<Body> = None;
+    let mut bodies: Vec<Body> = Vec::new();
 
     loop {
         // Skip blank-line newlines between top-level blocks.
@@ -116,30 +110,19 @@ pub fn parse(input: &str) -> Result<WfFile, ParseError> {
                 }
                 "iso8583" => {
                     expect_lbrace(&mut lex)?;
-                    if body.is_some() {
-                        return Err(ParseError::DuplicateBlock {
-                            name: "iso8583".to_string(),
-                        });
-                    }
-                    body = Some(Body::Iso8583(parse_iso8583(&mut lex)?));
+                    bodies.push(Body::Iso8583(parse_iso8583(&mut lex)?));
                 }
                 "swift-mt" => {
                     expect_lbrace(&mut lex)?;
-                    if body.is_some() {
-                        return Err(ParseError::DuplicateBlock {
-                            name: "swift-mt".to_string(),
-                        });
-                    }
-                    body = Some(Body::SwiftMt(parse_swift_mt(&mut lex)?));
+                    bodies.push(Body::SwiftMt(parse_swift_mt(&mut lex)?));
+                }
+                "mx" => {
+                    expect_lbrace(&mut lex)?;
+                    bodies.push(Body::Mx(parse_mx(&mut lex)?));
                 }
                 other => {
                     expect_lbrace(&mut lex)?;
-                    if body.is_some() {
-                        return Err(ParseError::DuplicateBlock {
-                            name: other.to_string(),
-                        });
-                    }
-                    body = Some(Body::Raw(parse_raw(&mut lex, other)?));
+                    bodies.push(Body::Raw(parse_raw(&mut lex, other)?));
                 }
             },
             other => {
@@ -152,7 +135,7 @@ pub fn parse(input: &str) -> Result<WfFile, ParseError> {
     }
 
     let meta = meta.ok_or(ParseError::MissingMeta)?;
-    Ok(WfFile { meta, body })
+    Ok(WfFile { meta, bodies })
 }
 
 /// One key + optional argument (`field 2`, `block 4`, `name`).
@@ -354,6 +337,15 @@ fn parse_swift_mt(lex: &mut Lexer<'_>) -> Result<SwiftMtBody, ParseError> {
                         value: n.to_string(),
                     });
                 }
+                // The single-line `block 4: …` form and the nested
+                // `block 4 { … }` form are mutually exclusive — a file
+                // using both has two sources of truth for block 4, which
+                // would silently drop one. Reject the second form here.
+                if id == 4 && body.block_4.is_some() {
+                    return Err(ParseError::DuplicateKey {
+                        key: "block 4".to_string(),
+                    });
+                }
                 if let Resolved::Value(v) = resolved {
                     if body.blocks.insert(id, v).is_some() {
                         return Err(ParseError::DuplicateKey {
@@ -378,6 +370,13 @@ fn parse_swift_mt(lex: &mut Lexer<'_>) -> Result<SwiftMtBody, ParseError> {
                     });
                 }
                 if body.block_4.is_some() {
+                    return Err(ParseError::DuplicateKey {
+                        key: "block 4".to_string(),
+                    });
+                }
+                // Mutually exclusive with the single-line `block 4: …`
+                // form captured in `blocks` — reject if both appear.
+                if body.blocks.contains_key(&4) {
                     return Err(ParseError::DuplicateKey {
                         key: "block 4".to_string(),
                     });
@@ -434,6 +433,66 @@ fn parse_block_4(lex: &mut Lexer<'_>) -> Result<BTreeMap<String, String>, ParseE
         };
         if fields.insert(full.clone(), value).is_some() {
             return Err(ParseError::DuplicateKey { key: full });
+        }
+    }
+}
+
+/// Parse an `mx { ... }` block into an opaque [`MxBody`].
+///
+/// Only the `xml:` key is meaningful — its value is the single-line
+/// ISO 20022 envelope, carried verbatim (wf-format does not interpret
+/// the XML). Any other keys are accepted and ignored so a future
+/// extension never forces a parser change. If no `xml:` key appears,
+/// `xml` defaults to the empty string.
+///
+/// Unlike the other blocks, the `xml:` value is read with
+/// [`Lexer::read_value_raw_until_newline`] rather than the normal
+/// value reader: an ISO 20022 envelope legitimately contains `//`
+/// (e.g. an `http://...` namespace URI), and the normal reader would
+/// treat that as a line comment and silently truncate the envelope.
+fn parse_mx(lex: &mut Lexer<'_>) -> Result<MxBody, ParseError> {
+    let mut mx = MxBody::default();
+    let mut seen_xml = false;
+    loop {
+        let tok = next_non_newline(lex)?;
+        match tok {
+            Tok::RBrace => return Ok(mx),
+            Tok::Eof => {
+                return Err(ParseError::UnclosedBlock {
+                    name: "mx".to_string(),
+                });
+            }
+            Tok::Ident(key) => {
+                // Each entry is `key: <value>`; only `xml` is interpreted.
+                let colon = lex.next_token()?;
+                if !matches!(colon, Tok::Colon) {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: "`:` after an `mx` key",
+                        got: format!("{colon:?}"),
+                    });
+                }
+                if key == "xml" {
+                    if seen_xml {
+                        return Err(ParseError::DuplicateKey {
+                            key: "xml".to_string(),
+                        });
+                    }
+                    seen_xml = true;
+                    // Opaque read: keeps `//` (e.g. `http://`) intact.
+                    mx.xml = lex.read_value_raw_until_newline();
+                } else {
+                    // Any other key is intentionally ignored — the `mx`
+                    // block is an opaque envelope carrier; only `xml:` is
+                    // interpreted. Consume its value so the loop advances.
+                    let _ = lex.read_value_until_newline();
+                }
+            }
+            other => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "an `mx` key name or `}`",
+                    got: format!("{other:?}"),
+                });
+            }
         }
     }
 }

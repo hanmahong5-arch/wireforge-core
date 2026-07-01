@@ -122,7 +122,13 @@ impl Bitmap8583 {
     }
 
     fn position(field: u16) -> Result<(usize, u8), BitmapError> {
-        if field == 0 || field > MAX_FIELDS {
+        // Field 1 is the secondary-bitmap-present indicator, managed
+        // exclusively by `encode`/`decode` — it is not addressable as a
+        // data field. Accepting `set(1)` would store a bit that
+        // `encode`/`decode` then clear (see `out[0] &= !0x80`), so the
+        // value would round-trip to `false` with no error. Reject it
+        // here so the silent-loss path is impossible.
+        if field == 0 || field == 1 || field > MAX_FIELDS {
             return Err(BitmapError::FieldOutOfRange(field));
         }
         let zero_based = (field - 1) as usize;

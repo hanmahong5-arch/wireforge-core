@@ -13,18 +13,22 @@
 //!
 //! # Dialect cheat sheet
 //!
-//! | dialect       | MTI                  | bitmap                       | length prefixes         | Numeric/Track data |
-//! |---------------|----------------------|------------------------------|-------------------------|--------------------|
-//! | `HybridAscii` | 4 ASCII digit chars  | 8 / 16 raw binary bytes      | ASCII digits            | ASCII chars        |
-//! | `FullAscii`   | 4 ASCII digit chars  | 16 / 32 ASCII hex chars      | ASCII digits            | ASCII chars        |
-//! | `FullBinary`  | 2 BCD bytes          | 8 / 16 raw binary bytes      | BCD (1 / 2 bytes)       | BCD (ceil(N/2) B)  |
+//! | dialect       | MTI                  | bitmap                       | length prefixes         | Numeric data       | Track/Alpha/Binary data |
+//! |---------------|----------------------|------------------------------|-------------------------|--------------------|-------------------------|
+//! | `HybridAscii` | 4 ASCII digit chars  | 8 / 16 raw binary bytes      | ASCII digits            | ASCII chars        | verbatim                |
+//! | `FullAscii`   | 4 ASCII digit chars  | 16 / 32 ASCII hex chars      | ASCII digits            | ASCII chars        | verbatim                |
+//! | `FullBinary`  | 2 BCD bytes          | 8 / 16 raw binary bytes      | BCD (1 / 2 bytes)       | BCD (ceil(N/2) B)  | verbatim                |
 //!
-//! `FullBinary` stores Numeric / Track field data as BCD nibbles on the
-//! wire but [`Iso8583Message`](super::parser::Iso8583Message) values are
-//! kept in their decoded ASCII form regardless of dialect, so callers can
-//! mix dialects on input and output without reasoning about nibble layout.
-//! Non-numeric fields (Alpha, AlphaNumericSpecial, Binary, …) pass through
-//! verbatim in every dialect.
+//! `FullBinary` BCD-packs only **Numeric** (`DataType::Numeric`) field data
+//! on the wire. Track (`DataType::Track`), Alpha, Binary, and all other
+//! non-numeric data types pass through verbatim in every dialect. Note that
+//! field 36 (Track 3) is modelled as `DataType::Numeric` and therefore does
+//! ride the BCD path, while field 35 (Track 2, `DataType::Track`, charset
+//! includes `=` / `D`) is verbatim.
+//!
+//! [`Iso8583Message`](super::parser::Iso8583Message) values are kept in
+//! their decoded ASCII form regardless of dialect, so callers can mix
+//! dialects on input and output without reasoning about nibble layout.
 //!
 //! The sniffer in [`parse_any`](super::parser::parse_any) tries dialects in
 //! declaration order; an unambiguous match wins, and ambiguous inputs

@@ -390,6 +390,14 @@ pub enum MtBuildError {
     InvalidFieldTag { tag: String },
     /// Sub-block tag was empty.
     EmptySubBlockTag,
+    /// Block 3 or 5 sub-block tag contains characters outside `[A-Z0-9]`
+    /// (e.g. `:` or `{`/`}`); such a tag would mis-parse on the receiver
+    /// because the wire format uses those characters as delimiters.
+    InvalidSubBlockTag { tag: String },
+    /// A block-4 field value contains a byte sequence that would cause the
+    /// receiver's parser to split it into multiple fields (`"\n:"`) or
+    /// collide with the block terminator (a line that is exactly `-`).
+    ValueWouldMisparse { tag: String },
 }
 
 impl std::fmt::Display for MtBuildError {
@@ -401,12 +409,35 @@ impl std::fmt::Display for MtBuildError {
             MtBuildError::InvalidFieldTag { tag } => {
                 write!(
                     f,
-                    "block 4 field tag {:?} contains non-[A-Z0-9] characters",
+                    "block 4 field tag {:?} contains non-[A-Z0-9] characters; \
+                     wire would mis-parse on receiver",
                     tag
                 )
             }
             MtBuildError::EmptySubBlockTag => {
-                write!(f, "sub-block has an empty tag")
+                write!(
+                    f,
+                    "sub-block has an empty tag; receiver cannot parse an empty tag"
+                )
+            }
+            MtBuildError::InvalidSubBlockTag { tag } => {
+                write!(
+                    f,
+                    "sub-block tag {:?} contains characters outside [A-Z0-9]; \
+                     `:`, `{{`, or `}}` in a tag would corrupt the wire framing \
+                     and mis-parse on the receiver",
+                    tag
+                )
+            }
+            MtBuildError::ValueWouldMisparse { tag } => {
+                write!(
+                    f,
+                    "block-4 field {:?} value contains `\\n:` (receiver would split \
+                     it into two fields) or a line that is exactly `-` (collides \
+                     with the block-4 terminator); caller must sanitise the value \
+                     before building",
+                    tag
+                )
             }
         }
     }
@@ -445,6 +476,28 @@ pub fn build(msg: &MtMessage) -> Result<String, MtBuildError> {
                     if sub.tag.is_empty() {
                         return Err(MtBuildError::EmptySubBlockTag);
                     }
+                    // Validate tag: must be all [A-Z0-9]. Characters like `:`,
+                    // `{`, `}` are wire delimiters — a tag containing them would
+                    // re-parse differently on the receiver (e.g. tag "1:0" would
+                    // produce `{1:0:value}` which a parser reads as tag "1",
+                    // value "0:value" — field identity is corrupted).
+                    if !sub
+                        .tag
+                        .bytes()
+                        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+                    {
+                        return Err(MtBuildError::InvalidSubBlockTag {
+                            tag: sub.tag.clone(),
+                        });
+                    }
+                    // A `{` / `}` in the value is a FIN brace delimiter:
+                    // `find_matching_brace` would open/close on it and
+                    // mis-frame the sub-block on the receiver. Reject it.
+                    if sub.value.contains('{') || sub.value.contains('}') {
+                        return Err(MtBuildError::ValueWouldMisparse {
+                            tag: sub.tag.clone(),
+                        });
+                    }
                     out.push('{');
                     out.push_str(&sub.tag);
                     out.push(':');
@@ -466,6 +519,28 @@ pub fn build(msg: &MtMessage) -> Result<String, MtBuildError> {
                                 .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
                         {
                             return Err(MtBuildError::InvalidFieldTag { tag: f.tag.clone() });
+                        }
+                        // Reject values that would cause the receiver to
+                        // mis-parse block 4:
+                        // - "\n:" starts a new field on the receiver side
+                        //   (covers "\r\n:" because "\r\n:" contains "\n:").
+                        // - A line that is exactly "-" collides with the block
+                        //   terminator, causing the receiver to truncate.
+                        // - "{" / "}" are FIN brace delimiters: a `{` in the
+                        //   value makes `find_matching_brace` consume the
+                        //   block-4 close brace, leaving the message unbalanced
+                        //   on re-parse.
+                        if f.value.contains("\n:") || f.value.contains('{') || f.value.contains('}')
+                        {
+                            return Err(MtBuildError::ValueWouldMisparse { tag: f.tag.clone() });
+                        }
+                        for line in f.value.split('\n') {
+                            let trimmed = line.strip_suffix('\r').unwrap_or(line);
+                            if trimmed == "-" {
+                                return Err(MtBuildError::ValueWouldMisparse {
+                                    tag: f.tag.clone(),
+                                });
+                            }
                         }
                         out.push_str("\r\n:");
                         out.push_str(&f.tag);

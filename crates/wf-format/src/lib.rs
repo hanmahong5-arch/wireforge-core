@@ -62,12 +62,22 @@
 //! - `{{var}}` substitutions (Bruno has these; Phase 2 decides format).
 //! - `assert { ... }` post-conditions (needs an assertion DSL design).
 //! - Cross-protocol nesting (e.g. `iso8583` block inside a `swift-mt`).
-//! - File-to-AST round-trip rendering — only one-way parse today.
+//! - Byte-exact (comment- and whitespace-preserving) round-trip. The
+//!   [`to_wf_string`] serializer renders an AST back to `.wf` text with
+//!   an **AST-idempotent** guarantee (`parse(to_wf_string(parse(s)?)?)? ==
+//!   parse(s)?`), but comments and original layout are dropped at parse
+//!   time and are not reconstructed. A lossless CST is future work.
 
 pub mod ast;
 pub mod lexer;
+pub mod pair;
 pub mod parser;
+pub mod writer;
 
-pub use ast::{Body, Iso8583Body, Meta, RawBody, SwiftMtBody, WfFile};
+pub use ast::{Body, Iso8583Body, Meta, MxBody, RawBody, SwiftMtBody, WfFile};
 pub use lexer::LexError;
+pub use pair::{
+    extract_mt_mx_pair, extract_oracle_triple, swift_mt_to_fin, OraclePairError, PairError,
+};
 pub use parser::{parse, ParseError};
+pub use writer::to_wf_string;

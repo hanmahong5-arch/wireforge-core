@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f3b5aa83774788264de447e9c45dcc41273e44cb65bf82fc8f2c7a53ec5ab572 # shrinks to meta = Meta { name: None, type_: None, seq: None, extra: {"A": "/*"} }, body = Iso8583Body { mti: None, fields: {}, extra: {} }
+cc 4b568716a685446df52d55bb22920b37aea79641cfabb8c481e5412859f2d493 # shrinks to meta = Meta { name: None, type_: None, seq: None, extra: {} }, prefix = "", suffix = "/*"

@@ -3,10 +3,10 @@
 //! [`MtMessage::decode_field`].
 //!
 //! Vectors come from the SWIFT MT User Handbook canonical MT103 example
-//! (the same one used in `tests/swift_structure.rs`). Per CLAUDE.md
-//! §4.1 ③, the test inputs are not regenerated from the decoder's own
-//! output — the wire is written longhand and the decoder is asked to
-//! agree with it.
+//! (the same one used in `tests/swift_structure.rs`). Per the project's
+//! test-independence policy, the test inputs are not regenerated from the
+//! decoder's own output — the wire is written longhand and the decoder is
+//! asked to agree with it.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
