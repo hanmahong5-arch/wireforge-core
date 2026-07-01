@@ -300,7 +300,7 @@ placeholder) with:
 - `build(&MtMessage) -> Result<String, MtBuildError>` closing the
   round-trip. Hand-written MT103 vector `MT103_FULL` is parsed and
   rebuilt **byte-exactly** (the test vector is longhand wire bytes,
-  not regenerated from `build` — anti-tautology per CLAUDE.md §4.1 ③).
+  not regenerated from `build` — anti-tautology by design).
   LF-only input → canonical CRLF output (canonical form on build, not
   byte-faithful preservation; the round-trip test uses pure-CRLF input
   on purpose to demonstrate the exact-bytes path).

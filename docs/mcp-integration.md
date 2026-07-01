@@ -1,9 +1,10 @@
 # MCP Integration
 
 `wf-mcp` is the Model Context Protocol server that exposes Wireforge's
-ISO 8583 codec as tools an AI agent can call. It speaks **stdio**
-transport — the agent (Claude Code, Cursor, hermes-agent, ...) spawns
-`wf-mcp` as a child process and exchanges JSON-RPC over stdin/stdout.
+ISO 8583 and SWIFT MT/MX codecs as tools an AI agent can call. It speaks
+**stdio** transport — the agent (Claude Code, Cursor, hermes-agent, ...)
+spawns `wf-mcp` as a child process and exchanges JSON-RPC over
+stdin/stdout.
 
 The server is **read-only and stateless**: every tool call is
 self-contained, no session data is persisted between calls, and the
@@ -11,15 +12,22 @@ process can be killed at any time.
 
 ## Tools exposed
 
-| Name                 | Purpose                                                         |
-|----------------------|-----------------------------------------------------------------|
-| `wf_parse_iso8583`   | Hex → structured field tree (MTI, bitmap, decoded fields).      |
-| `wf_build_iso8583`   | `{mti, fields}` → hex wire string.                              |
-| `wf_validate_iso8583`| Structural validation (see Limitations below).                  |
-| `wf_field_lookup`    | Field number (1..=128) → FieldDef (name, type, length spec).    |
-| `wf_decode_mti`      | 4-digit MTI → version + class + function + origin.              |
-| `wf_explain_message` | Natural-language description, no LLM call.                      |
-| `wf_roundtrip_check` | parse → build → byte-compare for canonicality.                  |
+The server exposes **12 read-only tools**:
+
+| Name                      | Purpose                                                          |
+|---------------------------|------------------------------------------------------------------|
+| `wf_parse_iso8583`        | Hex → structured field tree (MTI, bitmap, decoded fields).       |
+| `wf_build_iso8583`        | `{mti, fields}` → hex wire string.                               |
+| `wf_validate_iso8583`     | Structural validation (see Limitations below).                   |
+| `wf_field_lookup`         | Field number (1..=128) → FieldDef (name, type, length spec).     |
+| `wf_decode_mti`           | 4-digit MTI → version + class + function + origin.               |
+| `wf_explain_message`      | Natural-language description, no LLM call.                       |
+| `wf_roundtrip_check`      | parse → build → byte-compare for canonicality.                   |
+| `wf_parse_swift_mt`       | SWIFT MT message text → parsed blocks and tagged fields.         |
+| `wf_ebcdic_decode`        | EBCDIC-encoded hex bytes → decoded text.                         |
+| `wf_sm3`                  | Bytes → SM3 (GB/T 32905) hash digest.                            |
+| `wf_mt_mx_truncation_diff`| Detector: flags fields that would be lost or truncated mapping an MT message toward MX. Reports differences only — it does NOT convert, certify, or assert MT↔MX equivalence/conformance. |
+| `wf_mx_address_compliance` | Check a pacs.008.001.08, pacs.004.001.09, pacs.003.001.08 or pain.001.001.09 debtor/creditor postal address for the CBPR+ SR2026 structured-address requirement (Town Name `TwnNm` + Country `Ctry` in dedicated fields, mandatory 2026-11-14). Auto-detects the message type. A structural presence check against that one rule — DETECTOR, not a full CBPR+ validation and not a certification. |
 
 ### Limitations of `wf_validate_iso8583`
 

@@ -6,6 +6,45 @@ risk by selecting an upstream now and capturing the candidates considered.
 
 Authoritative reference of record for the wf-sm crate built today.
 
+> **⚠️ 2026-05-29 reversal — SM3 backend swapped to RustCrypto `sm3`.**
+> The selection in § 3 below (smcrypto 0.3.1) rested on one premise
+> recorded in the § 2 candidate table: *"RustCrypto sm3 — not published,
+> would need vendoring."* **That premise is now void.** RustCrypto has
+> since published `sm3` (0.5 on crates.io as of this date), implementing
+> the standard `Digest` trait, dual-licensed MIT OR Apache-2.0, with
+> `rust-version` 1.85 (below the workspace's 1.90, so no MSRV bump).
+>
+> wf-sm's SM3 backend is therefore moved `smcrypto 0.3` → `sm3 0.5`.
+> Rationale, in priority order:
+>
+> 1. **真流式 / 有界一切.** The old `smcrypto`-backed `Sm3` wrapper held a
+>    growable `Vec<u8>` of the *entire* input until `finalize`, violating
+>    the project's bounded-everything ("有界一切") constraint — hashing a multi-GB WAL would
+>    buffer the whole payload. RustCrypto's `Digest` keeps real 64-byte
+>    block state, so streaming costs O(1) memory.
+> 2. **Standard trait surface.** `Digest` is the de-facto Rust hashing
+>    interface; aligning lets downstream code compose SM3 with the rest
+>    of the RustCrypto ecosystem (HMAC, etc.) without bespoke glue. It
+>    also sets up W1.3 (SM4 via RustCrypto `sm4`, SM2 via `sm2`) on one
+>    consistent vendor.
+> 3. **Maintenance.** RustCrypto is a far more actively maintained org
+>    than a single-author `smcrypto`.
+>
+> **Public API is frozen across the swap** (`sm3` / `sm3_hex` / `Sm3` /
+> `SM3_DIGEST_LEN`) — exactly the migration path § 3.4 promised. The
+> **safety net for the swap is the unchanged GB/T 32905-2016 §A.1/§A.2
+> longhand test vectors** in `wf-sm/src/sm3.rs`: written from the spec
+> document, not regenerated from our own output, so an incorrect
+> migration diverges from the spec value. The § 4 throughput numbers
+> below were measured against the *old* smcrypto backend and are now
+> stale — re-measurement is deferred (not a current consumer requirement;
+> would be remarked, not erased, if re-run).
+>
+> Everything below this banner is preserved verbatim as the original
+> 2026-05-21 decision log.
+
+---
+
 ## 1. Goal & constraints
 
 - **Goal**: ship a pure-Rust SM3 wrapper today (`wf-sm`); leave SM2 / SM4

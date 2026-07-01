@@ -67,12 +67,12 @@ After redaction:
 # 1. Drop one or more sanitized files:
 cp ~/my-secure-store/bank-a-001.hex E:/wireforge/wireforge-core/samples/iso8583/
 
-# 2. Export API keys if running AI baseline:
-export ANTHROPIC_API_KEY=sk-ant-...
-export DEEPSEEK_API_KEY=...
+# 2. Export endpoint credentials if running the parse-accuracy baseline:
+export WF_MODEL_A_API_KEY=...
+export WF_MODEL_B_API_KEY=...
 
 # 3. Run the (currently ignored) baseline harness explicitly:
-cargo test --test ai_baseline -- --ignored --nocapture
+cargo test --test parse_accuracy -- --ignored --nocapture
 ```
 
 If `samples/iso8583/` is empty the harness exits with a `skipped: ...`
