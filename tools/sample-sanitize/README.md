@@ -74,6 +74,6 @@ cargo test
 
 Tests use a synthetic ISO 8583 message built via `wf-codec::iso8583::build`
 to validate the sanitize → round-trip → re-parse contract. Per
-CLAUDE.md §4.1 ③ ("测量与被测不可同源"), this is acceptable: the
-synthetic input drives the *sanitizer code path*, not the AI baseline
-that the sanitized samples will eventually feed into.
+the anti-tautology rule ("测量与被测不可同源"), this is acceptable: the
+synthetic input drives the *sanitizer code path*, not the parse-accuracy
+baseline that the sanitized samples will eventually feed into.

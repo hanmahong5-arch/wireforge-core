@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.hanmahong5-arch/wireforge",
+  "description": "Wireforge MCP server for ISO 8583 and SWIFT MT/MX financial messages; exposes 12 read-only tools: wf_parse_iso8583, wf_build_iso8583, wf_validate_iso8583, wf_field_lookup, wf_decode_mti, wf_explain_message, wf_roundtrip_check, wf_parse_swift_mt, wf_ebcdic_decode, wf_sm3, wf_mt_mx_truncation_diff, wf_mx_address_compliance.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/hanmahong5-arch/wireforge-core",
+    "source": "github",
+    "subfolder": "crates/wf-mcp"
+  },
+  "_meta": {
+    "io.github.hanmahong5-arch/wireforge": {
+      "distribution": "crates.io",
+      "crate": "wf-mcp",
+      "binary": "wf-mcp",
+      "install": "cargo install wf-mcp",
+      "transport": "stdio",
+      "readOnly": true,
+      "note": "crates.io / cargo is not yet a registryType in the official MCP registry schema (2025-12-11 supports npm, pypi, nuget, oci, mcpb). Until cargo is supported, install from crates.io with `cargo install wf-mcp` and run the `wf-mcp` binary over stdio. The repository field above points to the canonical source.",
+      "tools": [
+        "wf_parse_iso8583",
+        "wf_build_iso8583",
+        "wf_validate_iso8583",
+        "wf_field_lookup",
+        "wf_decode_mti",
+        "wf_explain_message",
+        "wf_roundtrip_check",
+        "wf_parse_swift_mt",
+        "wf_ebcdic_decode",
+        "wf_sm3",
+        "wf_mt_mx_truncation_diff",
+        "wf_mx_address_compliance"
+      ]
+    }
+  }
+}

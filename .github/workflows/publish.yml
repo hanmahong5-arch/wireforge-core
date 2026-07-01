@@ -1,0 +1,62 @@
+# Publishes all workspace crates to crates.io when a v* tag is pushed.
+#
+# The publish order below is dependency-driven: a crate can only be
+# published after every internal crate it path-depends on is already on
+# crates.io. The order is:
+#   pure leaves (no internal wf dep): wf-bitmap, wf-format, wf-wal, wf-sm,
+#                                     wf-mx, wf-obs
+#   -> wf-codec (-> wf-bitmap)
+#   -> wf-swift (-> wf-codec)
+#   -> wf-xform (-> wf-swift, wf-mx, wf-codec)
+#   -> wf-oracle (-> wf-codec)
+#   -> wf-cli, wf-mcp (-> all of the above)
+#
+# A short sleep between crates lets the crates.io sparse index propagate
+# so a dependent crate can resolve the just-published version.
+#
+# REQUIRED SECRET: CARGO_REGISTRY_TOKEN must be set in the repository
+# (or organization) Actions secrets. Without it every `cargo publish`
+# call fails with an authentication error.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: publish crates to crates.io
+    runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: publish
+
+      - name: Publish crates in dependency order
+        run: |
+          set -euo pipefail
+
+          # Pure leaf crates (no internal wf dependency) — any order.
+          for crate in wf-bitmap wf-format wf-wal wf-sm wf-mx wf-obs; do
+            echo "::group::publish $crate"
+            cargo publish --locked -p "$crate"
+            echo "::endgroup::"
+            sleep 30
+          done
+
+          # Dependents — each waits for the index to carry its deps.
+          for crate in wf-codec wf-swift wf-xform wf-oracle wf-cli wf-mcp; do
+            echo "::group::publish $crate"
+            cargo publish --locked -p "$crate"
+            echo "::endgroup::"
+            sleep 30
+          done

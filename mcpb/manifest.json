@@ -1,0 +1,94 @@
+{
+  "manifest_version": "0.3",
+  "name": "io.github.hanmahong5-arch/wireforge",
+  "display_name": "Wireforge",
+  "version": "0.1.0",
+  "description": "ISO 8583, SWIFT MT/MX, and SM-crypto toolkit for financial message parsing, validation, and translation. Read-only MCP server exposing 12 tools: wf_parse_iso8583, wf_build_iso8583, wf_validate_iso8583, wf_field_lookup, wf_decode_mti, wf_explain_message, wf_roundtrip_check, wf_parse_swift_mt, wf_ebcdic_decode, wf_sm3, wf_mt_mx_truncation_diff, wf_mx_address_compliance.",
+  "long_description": "Wireforge is a read-only financial-protocol analysis server. It parses and validates ISO 8583 payment messages, decodes EBCDIC-encoded data, computes SM3 cryptographic digests (GM/T 0004), performs SWIFT MT↔MX truncation-diff analysis, and checks pacs.008.001.08 / pacs.004.001.09 / pacs.003.001.08 / pain.001.001.09 SR2026 structured-address compliance — all without network access or side effects. Designed for payment developers, integration testers, and compliance engineers.",
+  "author": {
+    "name": "Wireforge Contributors",
+    "url": "https://github.com/hanmahong5-arch/wireforge-core"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/hanmahong5-arch/wireforge-core",
+  "homepage": "https://github.com/hanmahong5-arch/wireforge-core",
+  "keywords": [
+    "iso8583",
+    "swift",
+    "mt",
+    "mx",
+    "pacs008",
+    "payment",
+    "financial",
+    "sm3",
+    "ebcdic",
+    "mcp"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/wf-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/wf-mcp",
+      "args": [],
+      "env": {},
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/wf-mcp.exe"
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "wf_parse_iso8583",
+      "description": "Parse a raw ISO 8583 hex/binary message into structured fields."
+    },
+    {
+      "name": "wf_build_iso8583",
+      "description": "Build an ISO 8583 message from a structured field map."
+    },
+    {
+      "name": "wf_validate_iso8583",
+      "description": "Validate an ISO 8583 message against a field specification."
+    },
+    {
+      "name": "wf_field_lookup",
+      "description": "Look up ISO 8583 field definitions by field number or name."
+    },
+    {
+      "name": "wf_decode_mti",
+      "description": "Decode an ISO 8583 Message Type Indicator (MTI) into human-readable components."
+    },
+    {
+      "name": "wf_explain_message",
+      "description": "Produce a plain-language explanation of a parsed ISO 8583 or SWIFT message."
+    },
+    {
+      "name": "wf_roundtrip_check",
+      "description": "Parse then re-encode a message and report any field-level discrepancies."
+    },
+    {
+      "name": "wf_parse_swift_mt",
+      "description": "Parse a SWIFT MT message into tagged fields and validate structure."
+    },
+    {
+      "name": "wf_ebcdic_decode",
+      "description": "Decode EBCDIC-encoded bytes to UTF-8 text."
+    },
+    {
+      "name": "wf_sm3",
+      "description": "Compute an SM3 (GM/T 0004) cryptographic digest of the provided input."
+    },
+    {
+      "name": "wf_mt_mx_truncation_diff",
+      "description": "Diff a SWIFT MT message against its MX (ISO 20022) equivalent and identify truncated or unmapped fields."
+    },
+    {
+      "name": "wf_mx_address_compliance",
+      "description": "Structural CBPR+ SR2026 presence check: verifies a pacs.008.001.08, pacs.004.001.09, pacs.003.001.08 or pain.001.001.09 debtor/creditor postal address carries Town Name (TwnNm) and Country (Ctry) in dedicated structured fields (mandatory 2026-11-14). Auto-detects the message type. A DETECTOR, not a full CBPR+ validation and not a certification."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
+  }
+}

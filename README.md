@@ -1,24 +1,57 @@
 # wireforge-core
 
+> ### SR2026 address check in 30 seconds
+>
+> CBPR+ SR2026 makes structured debtor/creditor postal addresses (`TwnNm` +
+> `Ctry` in dedicated fields) **mandatory on 2026-11-14**. Batch-scan your
+> outbound pacs.008 / pacs.004 / pacs.003 / pain.001 store before the deadline:
+>
+> ```bash
+> cargo install --git https://github.com/hanmahong5-arch/wireforge-core wf-cli
+> wf xform address-check outbox/     # exit 0 = compliant, 1 = gaps, 2 = unreadable
+> ```
+>
+> Runs entirely on your machine — no message ever leaves it. CI-ready exit
+> codes. This is a structural presence **DETECTOR** for the cited SR2026 rule,
+> not a full CBPR+ validation and not a certification; details
+> [below](#sr2026-address-compliance-gate-cli).
+
 Apache-2.0 Rust crates for parsing, building, and reasoning about
 financial wire messages. Today covers **ISO 8583** (three on-the-wire
-dialects), **SWIFT MT** (structural + tag-level semantic decoders),
-**SM3** (China GM/T cryptographic hash), and the **`.wf` flat-file
-format** for capturing message specs under Git.
+dialects + runtime-loadable field specs), **SWIFT MT** (structural +
+tag-level semantic decoders, plus a typed facade), **ISO 20022 / MX**
+(inbound parse via a typed facade), **MT↔MX truncation diffing**,
+**EBCDIC** (CP037 / CP500), **China GM/T crypto** (SM3 / SM4 / SM2,
+functional — not 密评-certified), and the **`.wf` flat-file format**
+for capturing message specs under Git.
 
 ## Crates
 
 | Crate         | Purpose                                                            |
 |---------------|--------------------------------------------------------------------|
 | `wf-bitmap`   | ISO 8583 primary / secondary bitmap encode + decode.               |
-| `wf-codec`    | ISO 8583 parser + builder + 128-field type table (HybridAscii /   |
-|               | FullAscii / FullBinary BCD dialects); SWIFT MT structural parser  |
-|               | + semantic field decoders for tags 20 / 32A / 50K; EBCDIC stub.   |
+| `wf-codec`    | ISO 8583 parser + builder + 128-field table (HybridAscii /        |
+|               | FullAscii / FullBinary BCD dialects) + runtime-loadable FieldSpec; |
+|               | SWIFT MT structural parser + semantic decoders (20 / 32A / 50K);  |
+|               | EBCDIC CP037 / CP500 single-byte codec.                          |
 | `wf-cli`      | `wf` CLI binary — parse / build / validate from the shell.         |
 | `wf-format`   | Parser for the `.wf` Bruno-inspired flat-file DSL.                 |
 | `wf-mcp`      | Model Context Protocol server — expose codec to AI agents.         |
-| `wf-sm`       | China GM/T cryptography — SM3 today, SM2 / SM4 extension points.   |
+| `wf-sm`       | China GM/T cryptography — SM3 hash, SM4 cipher (ECB/CBC +          |
+|               | bounded streaming), SM2 signature (functional, not 密评-certified).|
+| `wf-swift`    | Typed SWIFT MT facade over an external parser, with lossless       |
+|               | fallback to `wf-codec`'s structural parser.                        |
+| `wf-mx`       | ISO 20022 / MX inbound facade (pacs / pain / camt / admi).         |
+| `wf-xform`    | pacs.008.001.08 ↔ MT103 truncation/loss **detector** across five   |
+|               | roles — DETECTOR not converter; no certification claim.            |
 | `wf-wal`      | Append-only write-ahead log with CRC-32 + `truncate_to` recovery.  |
+| `wf-obs`      | Local-first observability: leveled `tracing` logs, bounded raw-    |
+|               | buffer hex dumps, stderr subscriber setup (no telemetry).          |
+
+**Scope & honesty (`wf-xform`):** it compares pacs.008.001.08 against
+MT103 over five core roles and is SYNTHETIC-validated only (no real
+production samples yet); it is a DETECTOR, not a converter, and makes
+no certification, conformance, or equivalence claim.
 
 `tools/sample-sanitize/` is a standalone (out-of-workspace) binary
 that redacts PAN / track data from real ISO 8583 hex samples; see
@@ -54,6 +87,37 @@ Output: a tree showing MTI, bitmap, and decoded fields. ISO 8583
 auto-sniffs across HybridAscii / FullAscii / FullBinary dialects; pass
 `--dialect <name>` to force one.
 
+Add `-v` / `-vv` / `-vvv` for info / debug / trace logging on **stderr**
+(stdout stays machine-clean); at trace, the raw input buffer is hex-dumped.
+`RUST_LOG` overrides the level. Logs are local-only — no telemetry.
+
+## SR2026 address-compliance gate (CLI)
+
+CBPR+ SR2026 makes a structured debtor/creditor postal address (`TwnNm` +
+`Ctry` in dedicated `PstlAdr` fields) mandatory on **2026-11-14**. Scan your
+outbound message store before the deadline:
+
+```bash
+wf xform address-check outbox/             # scan a directory of *.xml
+wf xform address-check a.xml b.xml c.xml   # one or more explicit files
+cat msg.xml | wf xform address-check -     # one envelope from stdin
+```
+
+The message type (pacs.008.001.08 / pacs.004.001.09 / pacs.003.001.08 /
+pain.001.001.09) is auto-detected per file, and the process exits with a
+diff-style code so the check drops straight into CI:
+
+- `0` — every input is compliant
+- `1` — ran cleanly, but at least one input is non-compliant
+- `2` — at least one input could not be checked (unreadable / unparseable /
+  unsupported message type)
+
+One unreadable file does not abort the batch — it is reported and folded into
+the exit code. A directory scan is **one level, `*.xml` only, sorted**
+(recursive scan and a `--format json` machine output are not yet built). This
+is a **structural presence DETECTOR** for the one cited SR2026 rule — **not** a
+full CBPR+ validation and **not** a certification; all fixtures are SYNTHETIC.
+
 ## Quick start (MCP, for AI agents)
 
 ```bash
@@ -71,7 +135,7 @@ to `~/.claude/settings.json`:
 }
 ```
 
-The agent can now call eight tools:
+The agent can now call 12 tools:
 
 - `wf_parse_iso8583` — hex → structured field tree
 - `wf_build_iso8583` — `{mti, fields}` → hex
@@ -81,6 +145,15 @@ The agent can now call eight tools:
 - `wf_explain_message` — natural-language description (no LLM call)
 - `wf_roundtrip_check` — parse → build → byte-compare
 - `wf_parse_swift_mt` — SWIFT MT raw → structural block tree
+- `wf_ebcdic_decode` — EBCDIC-encoded hex bytes → decoded text
+- `wf_sm3` — bytes → SM3 (GB/T 32905) hash digest
+- `wf_mt_mx_truncation_diff` — pacs.008.001.08 ↔ MT103 field truncation/loss
+  **detector** across five roles (DETECTOR not converter; no
+  certification / conformance / equivalence claim)
+- `wf_mx_address_compliance` — check a pacs.008.001.08, pacs.004.001.09, pacs.003.001.08 or
+  pain.001.001.09 debtor/creditor postal address for the CBPR+ SR2026 structured-address
+  requirement (`TwnNm` + `Ctry` in dedicated fields, mandatory 2026-11-14); auto-detects the
+  message type. DETECTOR, not a full CBPR+ validation and not a certification
 
 See [`docs/mcp-integration.md`](docs/mcp-integration.md) for client
 setup details, the field-payload convention, and validator
@@ -116,8 +189,10 @@ let digest = sm3(b"abc");           // [u8; 32]
 let hex    = sm3_hex(b"abc");        // "66c7f0f4…8f4ba8e0"
 ```
 
-Backed by `smcrypto` 0.3; throughput ~60-100 MB/s single-thread on a
-laptop. Algorithm-selection rationale + measured numbers live in
+Backed by RustCrypto [`sm3`](https://docs.rs/sm3) (the `Digest` trait);
+the streaming `Sm3` hasher keeps real 64-byte block state, so hashing a
+large WAL is O(1) memory. Algorithm-selection rationale, the 2026-05-29
+swap from `smcrypto`, and the GB/T 32905-2016 test vectors live in
 [`docs/sm-crypto-research-2026-05.md`](docs/sm-crypto-research-2026-05.md).
 
 ## Status
@@ -125,11 +200,37 @@ laptop. Algorithm-selection rationale + measured numbers live in
 Pre-1.0. ISO 8583-1987 parser / builder are exact inverses for every
 supported dialect; field 1..=104 plus 128 have concrete spec
 definitions, and fields 105..=127 are treated as opaque binary
-envelopes. SWIFT MT structural layer is complete; semantic field
+envelopes. A runtime-loadable `FieldSpec` (TOML, `spec-load` feature)
+overrides the built-in table for national / private dialects without a
+recompile. SWIFT MT structural layer is complete; semantic field
 decoders cover three MT103 anchor tags (20 / 32A / 50K) with the
-`MtFieldDecoder` trait as the extension point. EBCDIC module is
-scaffolding only. `wf-sm` exposes SM3; SM2 / SM4 are reserved
-extension-point modules.
+`MtFieldDecoder` trait as the extension point. EBCDIC CP037 / CP500
+single-byte codec is implemented (tables vendored under the Unicode
+License, see `NOTICE`); DBCS host pages are deferred. `wf-sm` exposes
+SM3 hash, SM4 (ECB / CBC + bounded streaming), and SM2 signature —
+functional only, with **no** 密评 / GB/T 39786 compliance claim.
+
+## Scope & honesty
+
+Read this before trusting any number.
+
+- **No real production samples yet.** Correctness is grounded on synthetic and
+  standard/specification test vectors only (labelled `SYNTHETIC` in-source) plus
+  a property-based round-trip fuzz suite. Any accuracy statement is `⏳ pending`
+  real-sample validation. The Phase 0 exit gate (≥ 5 real ISO 8583 hex samples)
+  is **unmet** — contributions welcome via `tools/sample-sanitize/`.
+- **`wf-xform` is a truncation DETECTOR, not a converter.** It compares an MT103
+  and a pacs.008.001.08 a caller already holds and reports per-role field loss
+  against cited maximum lengths. It performs **no** conversion and makes **no**
+  certification, conformance, or equivalence claim.
+- **`wf-sm` (国密) is functional only** — no 密评 / GB/T 39786 / OSCCA
+  certification claim; SM2 rests on an unaudited upstream. Suitable for
+  development against CN rails, not as a certified cryptographic product.
+- **`wf-mx` wraps a third-party upstream** (`mx-message` 3.1.4) that is currently
+  frozen. The facade isolates the dependency; owning MX parsing is a future option.
+
+A grounded, source-cited go-to-market and next-steps plan lives in
+[`docs/strategy/next-steps-2026-06.md`](docs/strategy/next-steps-2026-06.md).
 
 ## Building
 

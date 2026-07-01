@@ -11,8 +11,13 @@ Cargo.lock.bak
 .DS_Store
 Thumbs.db
 
-# Real-message samples never committed to public repo (see docs/sample-policy.md, Phase 0 S2)
-/samples/
+# Real-message samples never committed to public repo (see docs/sample-policy.md, Phase 0 S2).
+# Use /samples/* (not /samples/) so git still recurses INTO the dir — a whole-dir
+# exclusion blocks recursion, which silently disables samples/.gitignore and even the
+# .gitkeep negations below. samples/.gitignore governs the per-subdir rules: it keeps
+# samples/iso8583/ as the (empty) real-sample slot and re-includes the committed,
+# clearly-labelled samples/synthetic/ demo subtree.
+/samples/*
 *.hex
 *.bin
 *.swift

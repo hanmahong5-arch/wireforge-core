@@ -1,0 +1,10 @@
+# Real banking message samples MUST NOT be committed.
+# Per wireforge-core docs/sample-policy.md, samples are git-lfs or private bucket only.
+*
+!.gitignore
+!iso8583/
+!iso8583/.gitkeep
+# Synthetic (hand-authored, NOT production) demo fixtures ARE committed.
+# These are explicitly not real captures — see synthetic/iso8583/README.md.
+!synthetic/
+!synthetic/**

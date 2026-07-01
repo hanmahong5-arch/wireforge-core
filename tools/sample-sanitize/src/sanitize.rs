@@ -261,8 +261,8 @@ mod tests {
     /// acceptor name (field 43). All values are spec-shape so `build` and
     /// `parse` round-trip.
     ///
-    /// Per CLAUDE.md §4.1 ③ "测量与被测不可同源": this synthetic input tests
-    /// the *sanitizer code path*, NOT the AI baseline. No tautology — the
+    /// Per the anti-tautology rule ("测量与被测不可同源"): this synthetic input tests
+    /// the *sanitizer code path*, NOT the parse-accuracy baseline. No tautology — the
     /// sanitizer's job is to redact + round-trip-verify, and that contract
     /// can (and should) be validated against deterministic inputs.
     fn synthetic_message() -> Iso8583Message {

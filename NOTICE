@@ -1,0 +1,16 @@
+Wireforge Core
+Copyright (c) Wireforge Contributors
+
+This product includes software developed by the Wireforge Contributors,
+licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+------------------------------------------------------------------------
+Third-party data
+------------------------------------------------------------------------
+
+EBCDIC <-> Unicode single-byte mapping tables for code pages CP037 and
+CP500 (vendored under crates/wf-codec/tables/) are derived from the
+Unicode Consortium's published character mapping data:
+
+  Unicode Character Mapping Data: Copyright (c) 1991-2005 Unicode, Inc.
+  Licensed under Unicode License V3 (https://www.unicode.org/license.txt).

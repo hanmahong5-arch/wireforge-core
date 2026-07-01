@@ -36,8 +36,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
-      - name: Build wf-cli release binary
-        run: cargo build --release --locked -p wf-cli --target ${{ matrix.target }}
+      - name: Build wf CLI + wf-mcp server release binaries
+        run: cargo build --release --locked -p wf-cli -p wf-mcp --target ${{ matrix.target }}
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
         shell: bash
@@ -45,6 +45,7 @@ jobs:
           STAGE="wf-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir "$STAGE"
           cp "target/${{ matrix.target }}/release/wf" "$STAGE/"
+          cp "target/${{ matrix.target }}/release/wf-mcp" "$STAGE/"
           cp README.md LICENSE "$STAGE/" 2>/dev/null || cp README.md "$STAGE/"
           tar -czf "$STAGE.tar.gz" "$STAGE"
           shasum -a 256 "$STAGE.tar.gz" > "$STAGE.tar.gz.sha256"
@@ -57,6 +58,7 @@ jobs:
           STAGE="wf-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir "$STAGE"
           cp "target/${{ matrix.target }}/release/wf.exe" "$STAGE/"
+          cp "target/${{ matrix.target }}/release/wf-mcp.exe" "$STAGE/"
           cp README.md "$STAGE/" 2>/dev/null || true
           cp LICENSE "$STAGE/" 2>/dev/null || true
           7z a "$STAGE.zip" "$STAGE"
@@ -87,5 +89,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "wireforge-core ${GITHUB_REF_NAME}" \
-            --notes "Prebuilt wf CLI binaries for linux-x86_64, macos-aarch64, windows-x86_64. See README for install via cargo install --git." \
+            --notes "Prebuilt binaries for linux-x86_64, macos-aarch64, windows-x86_64. Each archive contains both the \`wf\` CLI and the \`wf-mcp\` MCP server. See README for install via cargo install --git." \
             artifacts/*
