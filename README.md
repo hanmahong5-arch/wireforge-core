@@ -16,6 +16,30 @@
 > not a full CBPR+ validation and not a certification; details
 > [below](#sr2026-address-compliance-gate-cli).
 
+## What is this?
+
+Wireforge is a **local-first toolkit for financial wire messages** — a CLI
+(`wf`), an AI-agent server (`wf-mcp`, 12 read-only MCP tools), and the Rust
+crates underneath. It exists because four problems keep landing on payment
+teams' desks:
+
+| Pain | What Wireforge does about it |
+|---|---|
+| **SR2026 deadline (2026-11-14):** CBPR+ makes structured debtor/creditor addresses mandatory; free-text `AdrLine` messages face rejection and repair queues | `wf xform address-check` batch-scans your outbound pacs.008 / pacs.004 / pacs.003 / pain.001 store and exits with a CI-ready 0/1/2 verdict per run |
+| **Silent MT↔MX data loss:** coexistence-era conversion truncates 140-char MX names/remittance into 4×35 MT blocks — an AML/screening risk nobody reports | `wf xform diff` compares a matched MT103 + pacs.008 pair and names each truncated/dropped role, including the exact lost characters |
+| **Messages are too sensitive for online tools:** you cannot paste production payment data into a web validator | Everything runs offline on your machine — no network calls, no telemetry, stdout clean for pipes |
+| **Legacy migration "trust us" gap:** a replaced ISO 8583 endpoint claims byte-compatibility; nobody can prove it | `wf oracle check` replays captured legacy-vs-migrated responses under an operator-approved mask spec and emits field-level regression-conformance EVIDENCE; `wf layout check` verifies recovered fixed-length specs against real captures |
+
+**Who it's for:** payment/integration engineers wiring compliance gates into
+CI, compliance teams sizing their SR2026 backlog, migration teams needing
+regression evidence, and AI-agent users who want a safe read-only tool for
+message forensics.
+
+**Start here → [User Guide](docs/user-guide.md)** — task-oriented manual for
+every command, CI recipes included. No Rust knowledge required.
+
+## For developers: the crates
+
 Apache-2.0 Rust crates for parsing, building, and reasoning about
 financial wire messages. Today covers **ISO 8583** (three on-the-wire
 dialects + runtime-loadable field specs), **SWIFT MT** (structural +
@@ -24,8 +48,6 @@ tag-level semantic decoders, plus a typed facade), **ISO 20022 / MX**
 **EBCDIC** (CP037 / CP500), **China GM/T crypto** (SM3 / SM4 / SM2,
 functional — not 密评-certified), and the **`.wf` flat-file format**
 for capturing message specs under Git.
-
-## Crates
 
 | Crate         | Purpose                                                            |
 |---------------|--------------------------------------------------------------------|
@@ -120,11 +142,19 @@ full CBPR+ validation and **not** a certification; all fixtures are SYNTHETIC.
 
 ## Quick start (MCP, for AI agents)
 
+**Claude Desktop**: download
+[`wireforge.mcpb`](https://github.com/hanmahong5-arch/wireforge-core/releases/download/v0.1.0/wireforge.mcpb)
+and open it (Settings → Extensions) — the bundle carries macOS (Apple
+Silicon) and Windows binaries. The server is on the MCP Registry as
+`io.github.hanmahong5-arch/wireforge`.
+
+**Other stdio clients**: install the binary —
+
 ```bash
 cargo install --path crates/wf-mcp
 ```
 
-Then wire the binary into your MCP-aware client. For Claude Code, add
+— then wire it into your MCP-aware client. For Claude Code, add
 to `~/.claude/settings.json`:
 
 ```json
