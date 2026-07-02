@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.hanmahong5-arch/wireforge",
-  "description": "Wireforge MCP server for ISO 8583 and SWIFT MT/MX financial messages; exposes 12 read-only tools: wf_parse_iso8583, wf_build_iso8583, wf_validate_iso8583, wf_field_lookup, wf_decode_mti, wf_explain_message, wf_roundtrip_check, wf_parse_swift_mt, wf_ebcdic_decode, wf_sm3, wf_mt_mx_truncation_diff, wf_mx_address_compliance.",
+  "description": "Read-only MCP tools for ISO 8583 and SWIFT MT/MX: parse, validate, diff, SR2026 address checks.",
   "version": "0.1.0",
   "packages": [
     {
