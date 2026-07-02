@@ -57,9 +57,19 @@ wireforge.mcpb (ZIP)
 
 This matches what `manifest.json` declares in `server.entry_point` (`server/wf-mcp`) and `mcp_config.command` (`${__dirname}/server/wf-mcp`, with a `platform_overrides.win32` pointing to `${__dirname}/server/wf-mcp.exe`).
 
-### 1.3 Note on multi-platform bundles
+### 1.3 Multi-platform bundle (resolved 2026-07-02)
 
-⏳ **verify** — The mcpb spec v0.3 supports `platform_overrides` in `mcp_config` but it is unclear whether a single `.mcpb` ZIP can embed *multiple* platform binaries (e.g., `server/wf-mcp` for Linux/macOS and `server/wf-mcp.exe` for Windows) and have clients pick the right one at install time. The reference examples show single-platform bundles. Safe approach: produce one bundle per platform and publish separate registry entries with platform-specific identifiers, or wait for official multi-platform guidance. Until confirmed, the build script produces one bundle per invocation.
+The shipped `wireforge.mcpb` is a **two-platform bundle** assembled from the
+GitHub Release binaries by `mcpb/assemble-release-mcpb.sh`:
+
+- `server/wf-mcp` — darwin aarch64 binary (the unix `mcp_config.command` path)
+- `server/wf-mcp.exe` — windows x86_64 binary (`platform_overrides.win32`)
+
+This is exactly the layout `manifest.json` already declares; `compatibility.platforms`
+is narrowed to `["darwin", "win32"]` accordingly (the platforms .mcpb installers
+actually target). Linux users install via `cargo install wf-mcp` — noted in the
+registry `_meta` and README. The single-platform `build-mcpb.sh` remains for
+local native testing.
 
 ---
 
@@ -211,8 +221,9 @@ curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.han
 
 When releasing a new version (e.g., `0.2.0`):
 
-1. `bash mcpb/build-mcpb.sh` → get new SHA-256.
-2. Upload new `wireforge.mcpb` as a GitHub Release asset for the new tag.
-3. Update `version` and `identifier` URL (new tag) and `fileSha256` in `server.json`.
-4. Update `version` in `mcpb/manifest.json`.
-5. `mcp-publisher publish`.
+1. Update `version` in `mcpb/manifest.json` (and tool list if it changed).
+2. Push the new tag; wait for `release.yml` to publish the binaries.
+3. `bash mcpb/assemble-release-mcpb.sh v0.2.0` → get new SHA-256.
+4. `gh release upload v0.2.0 mcpb/dist/wireforge.mcpb mcpb/dist/wireforge.mcpb.sha256`
+5. Update `version`, `identifier` URL (new tag) and `fileSha256` in `server.json`.
+6. `mcp-publisher publish`.

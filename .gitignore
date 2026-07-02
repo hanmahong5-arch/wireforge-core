@@ -30,3 +30,6 @@ Thumbs.db
 
 # Standalone tool crates that are NOT workspace members keep their own target/.
 /tools/sample-sanitize/target/
+
+# Built MCP bundles — shipped as GitHub Release assets, never committed.
+/mcpb/dist/

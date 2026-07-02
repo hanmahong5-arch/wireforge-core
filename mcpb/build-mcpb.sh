@@ -41,8 +41,9 @@ CRATE="-p wf-mcp"
 if [[ $# -ge 1 ]]; then
   TARGET="$1"
 else
-  TARGET="$("${CARGO}" -q version --color never 2>/dev/null; rustc -vV 2>/dev/null | grep '^host:' | awk '{print $2}')"
-  # Fallback if rustc is not directly on PATH
+  RUSTC="${RUSTC:-$(dirname "${CARGO}")/rustc}"
+  TARGET="$("${RUSTC}" -vV 2>/dev/null | grep '^host:' | awk '{print $2}')"
+  # Fallback if rustc is not next to cargo either
   if [[ -z "${TARGET}" ]]; then
     TARGET="x86_64-pc-windows-msvc"
     echo "WARNING: could not auto-detect host triple, defaulting to ${TARGET}"
