@@ -10,7 +10,7 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use wf_xform::{check_mx_address, AddressComplianceReport, AddressVerdict};
+use wf_xform::check_mx_address;
 
 /// Honest scope statement: single source of truth reused in the JSON `note`
 /// field and the `#[tool(description=...)]` on the server method.
@@ -33,47 +33,13 @@ pub struct Request {
 pub fn handle(req: Request) -> Result<Value, String> {
     let mx = wf_mx::WfMx::from_xml(&req.mx).map_err(|e| e.to_string())?;
     let report = check_mx_address(&mx).map_err(|e| e.to_string())?;
+    let report_json = report.to_json();
     Ok(json!({
         "note": SCOPE_NOTE,
-        "message_type": report.message_type,
-        "rows": rows_json(&report),
+        "message_type": report_json["message_type"],
+        "compliant": report_json["compliant"],
+        "rows": report_json["rows"],
     }))
-}
-
-/// Serialise each address row.
-pub fn rows_json(report: &AddressComplianceReport) -> Vec<Value> {
-    report
-        .rows
-        .iter()
-        .map(|r| {
-            let mut obj = json!({
-                "party": r.party.as_str(),
-                "verdict": verdict_str(&r.verdict),
-                "unstructured_lines": r.unstructured_lines,
-            });
-            // Populate optional fields only when present so the JSON stays
-            // compact. `obj` is always a JSON object; if `as_object_mut`
-            // returns `None` the row is emitted without optional fields.
-            if let Some(map) = obj.as_object_mut() {
-                if let Some(ref tn) = r.town_name {
-                    map.insert("town_name".into(), json!(tn));
-                }
-                if let Some(ref ct) = r.country {
-                    map.insert("country".into(), json!(ct));
-                }
-            }
-            obj
-        })
-        .collect()
-}
-
-/// Stable lowercase verdict label.
-pub fn verdict_str(v: &AddressVerdict) -> &'static str {
-    match v {
-        AddressVerdict::Compliant => "compliant",
-        AddressVerdict::MissingStructured { .. } => "missing_structured",
-        AddressVerdict::NoAddress => "no_address",
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +120,12 @@ mod tests {
             )),
         };
         let v = handle(req).expect("handle must succeed");
-        assert_eq!(debtor_row(&v)["verdict"], "compliant");
+        let row = debtor_row(&v);
+        assert_eq!(row["verdict"], "compliant");
+        assert!(
+            row["remediation"].is_null(),
+            "compliant row must carry null remediation: {row:?}"
+        );
         let note = v["note"].as_str().expect("note string");
         assert!(note.contains("SR2026"), "note must cite SR2026");
         assert!(
@@ -163,7 +134,8 @@ mod tests {
         );
     }
 
-    /// AdrLine only → missing_structured, unstructured_lines matches.
+    /// AdrLine only → missing_structured, unstructured_lines matches, and a
+    /// non-null remediation string is present.
     #[test]
     fn adr_line_only_reports_missing_structured() {
         let req = Request {
@@ -173,6 +145,10 @@ mod tests {
         let row = debtor_row(&v);
         assert_eq!(row["verdict"], "missing_structured");
         assert_eq!(row["unstructured_lines"], 1);
+        assert!(
+            row["remediation"].is_string(),
+            "missing_structured row must carry remediation: {row:?}"
+        );
     }
 
     /// No PstlAdr → no_address verdict.

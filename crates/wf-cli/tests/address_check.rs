@@ -9,8 +9,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use wf_cli::{
-    mx_address_compliance, mx_address_report, render_address_scan, select_xml, AddressGate,
-    ScanEntry,
+    mx_address_compliance, mx_address_report, render_address_scan, render_address_scan_csv,
+    render_address_scan_json, select_xml, AddressGate, ScanEntry,
 };
 
 /// pacs.008 envelope with an optional debtor `<PstlAdr>` block injected after
@@ -569,5 +569,200 @@ fn select_xml_empty_when_no_xml() {
     assert!(
         got.is_empty(),
         "no .xml inputs must yield an empty selection (the binary fails loud on this), got: {got:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `--format json` / `--format csv` — SYNTHETIC, anti-tautology
+// ---------------------------------------------------------------------------
+//
+// Same real-checker-derived entries as the text-path gate tests above; these
+// only assert the JSON/CSV *wire shape* and that the gate/exit_code cannot
+// drift from `render_address_scan`'s gate for the same entries.
+
+/// A pacs.008 debtor whose `TwnNm` contains a comma, so its `town_name`
+/// column exercises RFC-4180 quoting in the CSV path. Both parties carry
+/// TwnNm + Ctry (via `pacs008_pair`, the only builder that can make the
+/// creditor compliant too), so the entry is fully compliant per SR2026 —
+/// only the debtor's town-name *value* is adversarial.
+const TWN_WITH_COMMA: &str = "<PstlAdr><TwnNm>BERLIN, MITTE</TwnNm><Ctry>DE</Ctry></PstlAdr>";
+
+fn comma_town_entry(label: &str) -> ScanEntry {
+    ok_entry(label, &pacs008_pair(Some(TWN_WITH_COMMA), Some(TWN_CTRY)))
+}
+
+#[test]
+fn json_parses_back_and_has_schema_fields() {
+    let entries = [
+        compliant_entry("a.xml"),
+        non_compliant_entry("b.xml"),
+        error_entry("c.xml"),
+    ];
+    let (body, gate) = render_address_scan_json(&entries);
+    assert_eq!(gate, AddressGate::HadErrors, "any error dominates the gate");
+    assert_eq!(gate.code(), 2);
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&body).expect("JSON output must parse back via serde_json");
+    assert_eq!(doc["schema_version"], "1.0");
+    assert_eq!(doc["gate"], "had_errors");
+    assert_eq!(doc["exit_code"], 2);
+
+    let results = doc["results"].as_array().expect("results must be an array");
+    assert_eq!(
+        results.len(),
+        entries.len(),
+        "results length must equal the number of input entries"
+    );
+
+    // The compliant entry: status ok, carries message_type + rows +
+    // remediation (via the wf-xform to_json row shape, not re-derived here).
+    let ok = &results[0];
+    assert_eq!(ok["status"], "ok");
+    assert_eq!(ok["message_type"], "pacs.008.001.08");
+    assert_eq!(ok["label"], "a.xml");
+    let rows = ok["rows"].as_array().expect("ok entry must carry rows");
+    assert!(!rows.is_empty(), "compliant entry must carry party rows");
+    assert!(
+        rows.iter().all(|r| r["remediation"].is_null()),
+        "fully compliant rows must carry null remediation, got: {rows:?}"
+    );
+
+    // The error entry: status error, carries the error message.
+    let err = &results[2];
+    assert_eq!(err["status"], "error");
+    assert_eq!(err["label"], "c.xml");
+    assert!(
+        err["error"].as_str().is_some_and(|s| !s.is_empty()),
+        "error entry must carry a non-empty error string, got: {err:?}"
+    );
+}
+
+#[test]
+fn json_gate_matches_text_gate_for_same_entries() {
+    // Same three-entry mixed batch as the text-path test
+    // (`multi_any_error_dominates_gate_two`) — the JSON gate must not drift.
+    let entries = [
+        compliant_entry("a.xml"),
+        non_compliant_entry("b.xml"),
+        error_entry("c.xml"),
+    ];
+    let (_text_body, text_gate) = render_address_scan(&entries);
+    let (_json_body, json_gate) = render_address_scan_json(&entries);
+    assert_eq!(text_gate, json_gate);
+}
+
+#[test]
+fn csv_header_is_exact() {
+    let (body, _gate) = render_address_scan_csv(&[compliant_entry("a.xml")]);
+    let header = body.lines().next().expect("csv must have a header line");
+    assert_eq!(
+        header,
+        "file,status,message_type,party,verdict,town_name,country,unstructured_lines,remediation"
+    );
+}
+
+/// Minimal RFC-4180 record parser for test assertions only: splits one CSV
+/// record (no embedded bare newlines outside quotes) into fields, honoring
+/// quoted fields with doubled inner `"`. Deliberately independent of
+/// `csv_field` in lib.rs so a passing test cannot be a tautology of the
+/// production quoting logic.
+fn parse_csv_record(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut field = String::new();
+    let mut chars = line.chars().peekable();
+    let mut in_quotes = false;
+    while let Some(c) = chars.next() {
+        if in_quotes {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    field.push('"');
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                field.push(c);
+            }
+        } else {
+            match c {
+                '"' => in_quotes = true,
+                ',' => {
+                    fields.push(std::mem::take(&mut field));
+                }
+                _ => field.push(c),
+            }
+        }
+    }
+    fields.push(field);
+    fields
+}
+
+/// Split a CSV body into its data-row lines (CRLF-terminated per RFC-4180),
+/// dropping the header line and any trailing empty line.
+fn csv_data_lines(body: &str) -> Vec<&str> {
+    body.split("\r\n")
+        .skip(1) // header
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+#[test]
+fn csv_comma_in_town_name_is_rfc4180_quoted() {
+    let (body, gate) = render_address_scan_csv(&[comma_town_entry("a.xml")]);
+    assert_eq!(gate, AddressGate::AllCompliant);
+
+    // A naive comma-split would cut "BERLIN, MITTE" into two fields, which
+    // would misalign every following column. Assert the quoted form is
+    // present verbatim, and that a real RFC-4180 parse recovers the intended
+    // 9-column row.
+    assert!(
+        body.contains("\"BERLIN, MITTE\""),
+        "comma-bearing town_name must be wrapped in double quotes, got: {body}"
+    );
+
+    let lines = csv_data_lines(&body);
+    let debtor_row = parse_csv_record(lines[0]);
+    assert_eq!(debtor_row.len(), 9, "row must have exactly 9 columns");
+    assert_eq!(
+        debtor_row[5], "BERLIN, MITTE",
+        "town_name column must recover the unsplit value"
+    );
+    assert_eq!(debtor_row[3], "debtor");
+}
+
+#[test]
+fn csv_error_row_shape_is_correct() {
+    let (body, gate) = render_address_scan_csv(&[error_entry("bad.xml")]);
+    assert_eq!(gate, AddressGate::HadErrors);
+
+    let lines = csv_data_lines(&body);
+    assert_eq!(lines.len(), 1, "one error entry must yield one data row");
+    let row = parse_csv_record(lines[0]);
+    assert_eq!(row.len(), 9);
+    assert_eq!(row[0], "bad.xml");
+    assert_eq!(row[1], "error");
+    assert_eq!(row[2], "", "message_type column must be empty for an error row");
+    assert_eq!(row[3], "", "party column must be empty for an error row");
+    assert!(
+        !row[8].is_empty(),
+        "the error text must be carried in the remediation column, got row: {row:?}"
+    );
+}
+
+#[test]
+fn csv_total_row_count_is_parties_plus_error_rows() {
+    // compliant_entry -> 2 parties (debtor + creditor), non_compliant_entry
+    // -> 2 parties, error_entry -> 1 error row. Total = 2 + 2 + 1 = 5.
+    let (body, _gate) = render_address_scan_csv(&[
+        compliant_entry("a.xml"),
+        non_compliant_entry("b.xml"),
+        error_entry("c.xml"),
+    ]);
+    let lines = csv_data_lines(&body);
+    assert_eq!(
+        lines.len(),
+        5,
+        "row count must be parties across ok entries + one row per error entry, got: {lines:?}"
     );
 }

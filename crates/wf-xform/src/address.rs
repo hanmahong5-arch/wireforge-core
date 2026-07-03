@@ -27,6 +27,7 @@ use crate::XformError;
 
 /// Which party is being checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "json", derive(serde::Serialize))]
 pub enum AddressParty {
     Debtor,
     Creditor,
@@ -48,6 +49,7 @@ impl AddressParty {
 /// Verdict for one party against the CBPR+ SR2026 rule: `PstlAdr` must carry
 /// `TwnNm` + `Ctry` in dedicated structured fields (mandatory 2026-11-14).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json", derive(serde::Serialize))]
 pub enum AddressVerdict {
     /// `PstlAdr` is present with BOTH `TwnNm` and `Ctry` populated.
     Compliant,
@@ -67,6 +69,7 @@ pub enum AddressVerdict {
 
 /// One party's address compliance result row.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json", derive(serde::Serialize))]
 pub struct AddressRow {
     /// The party this row describes.
     pub party: AddressParty,
@@ -83,6 +86,7 @@ pub struct AddressRow {
 /// The full address compliance report: one [`AddressRow`] per party in
 /// [`AddressParty::ALL`] order.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json", derive(serde::Serialize))]
 pub struct AddressComplianceReport {
     /// One row per party in [`AddressParty::ALL`] order.
     pub rows: Vec<AddressRow>,
@@ -105,6 +109,87 @@ impl AddressComplianceReport {
         self.rows
             .iter()
             .all(|r| matches!(r.verdict, AddressVerdict::Compliant))
+    }
+
+    /// Serialize this report to the canonical wire JSON shape shared by every
+    /// surface (CLI, MCP tool, future API): `{ "message_type", "compliant",
+    /// "rows": [ { "party", "verdict", "town_name", "country",
+    /// "unstructured_lines", "remediation" }, ... ] }`.
+    ///
+    /// `town_name` / `country` / `remediation` are JSON `null` (never
+    /// omitted) when absent, so downstream CSV columns stay stable.
+    #[cfg(feature = "json")]
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "message_type": self.message_type,
+            "compliant": self.all_compliant(),
+            "rows": self.rows.iter().map(|row| {
+                serde_json::json!({
+                    "party": row.party.as_str(),
+                    "verdict": verdict_str(&row.verdict),
+                    "town_name": row.town_name,
+                    "country": row.country,
+                    "unstructured_lines": row.unstructured_lines,
+                    "remediation": row.remediation(),
+                })
+            }).collect::<Vec<_>>(),
+        })
+    }
+}
+
+/// Map an [`AddressVerdict`] to its stable, machine-readable string form —
+/// identical to the strings the MCP address-compliance tool has always
+/// returned (`"compliant"` | `"missing_structured"` | `"no_address"`).
+pub fn verdict_str(v: &AddressVerdict) -> &'static str {
+    match v {
+        AddressVerdict::Compliant => "compliant",
+        AddressVerdict::MissingStructured { .. } => "missing_structured",
+        AddressVerdict::NoAddress => "no_address",
+    }
+}
+
+impl AddressRow {
+    /// Actionable, per-party fix guidance for this row's verdict.
+    ///
+    /// This is a **DETECTOR**: it names which structured field(s) are
+    /// absent and tells the operator what to do about it — it does NOT
+    /// restructure, convert, or auto-fix the address itself. `None` when
+    /// the row is already [`AddressVerdict::Compliant`].
+    pub fn remediation(&self) -> Option<String> {
+        match &self.verdict {
+            AddressVerdict::Compliant => None,
+            AddressVerdict::MissingStructured {
+                town_name_present,
+                country_present,
+                unstructured_lines,
+            } => {
+                let mut missing = Vec::new();
+                if !town_name_present {
+                    missing.push("TwnNm");
+                }
+                if !country_present {
+                    missing.push("Ctry");
+                }
+                let missing_list = missing.join(" and ");
+                Some(format!(
+                    "The {party} address is missing the structured {missing_list} field(s); \
+                     {lines} unstructured AdrLine line(s) were found instead. Populate the \
+                     missing structured field(s) at the originating system and migrate the \
+                     free-text AdrLine content into structured elements — this checker is a \
+                     DETECTOR and does NOT restructure the address for you. CBPR+ SR2026 makes \
+                     this mandatory from 2026-11-14.",
+                    party = self.party.as_str(),
+                    missing_list = missing_list,
+                    lines = unstructured_lines,
+                ))
+            }
+            AddressVerdict::NoAddress => Some(format!(
+                "The {party} carries no PstlAdr at all; if this flow requires an address, add \
+                 one with structured TwnNm + Ctry populated. CBPR+ SR2026 mandates structure \
+                 whenever an address is present (mandatory 2026-11-14).",
+                party = self.party.as_str(),
+            )),
+        }
     }
 }
 
@@ -354,5 +439,211 @@ fn document_kind(doc: &Document) -> &'static str {
         Document::Pacs003(_) => "pacs.003",
         Document::Pain001(_) => "pain.001",
         _ => "an unsupported MX document",
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    // Every fixture here is hand-authored SYNTHETIC data; expectations are
+    // computed by hand from the SR2026 rule (TwnNm + Ctry both present ⇒
+    // compliant), never read back from the checker under test.
+
+    fn compliant_row(party: AddressParty) -> AddressRow {
+        AddressRow {
+            party,
+            verdict: AddressVerdict::Compliant,
+            town_name: Some("LONDON".to_string()),
+            country: Some("GB".to_string()),
+            unstructured_lines: 0,
+        }
+    }
+
+    fn missing_town_row(party: AddressParty) -> AddressRow {
+        // Ctry present, TwnNm absent.
+        AddressRow {
+            party,
+            verdict: AddressVerdict::MissingStructured {
+                town_name_present: false,
+                country_present: true,
+                unstructured_lines: 2,
+            },
+            town_name: None,
+            country: Some("GB".to_string()),
+            unstructured_lines: 2,
+        }
+    }
+
+    fn missing_country_row(party: AddressParty) -> AddressRow {
+        // TwnNm present, Ctry absent.
+        AddressRow {
+            party,
+            verdict: AddressVerdict::MissingStructured {
+                town_name_present: true,
+                country_present: false,
+                unstructured_lines: 1,
+            },
+            town_name: Some("LONDON".to_string()),
+            country: None,
+            unstructured_lines: 1,
+        }
+    }
+
+    fn missing_both_row(party: AddressParty) -> AddressRow {
+        // Neither TwnNm nor Ctry present.
+        AddressRow {
+            party,
+            verdict: AddressVerdict::MissingStructured {
+                town_name_present: false,
+                country_present: false,
+                unstructured_lines: 3,
+            },
+            town_name: None,
+            country: None,
+            unstructured_lines: 3,
+        }
+    }
+
+    fn no_address_row(party: AddressParty) -> AddressRow {
+        AddressRow {
+            party,
+            verdict: AddressVerdict::NoAddress,
+            town_name: None,
+            country: None,
+            unstructured_lines: 0,
+        }
+    }
+
+    fn assert_honest_wording(text: &str) {
+        assert!(text.contains("2026-11-14"), "text: {text}");
+        let lower = text.to_lowercase();
+        assert!(!lower.contains("certif"), "text: {text}");
+        assert!(!lower.contains("convert"), "text: {text}");
+        assert!(!lower.contains("guarantee"), "text: {text}");
+    }
+
+    #[test]
+    fn remediation_none_for_compliant() {
+        let row = compliant_row(AddressParty::Debtor);
+        assert_eq!(row.remediation(), None);
+    }
+
+    #[test]
+    fn remediation_names_twn_nm_when_only_country_present() {
+        let row = missing_town_row(AddressParty::Debtor);
+        let text = row.remediation().expect("must have remediation text");
+        assert!(text.contains("TwnNm"), "text: {text}");
+        assert!(!text.contains("Ctry"), "text: {text}");
+        assert!(text.contains('2'), "should mention 2 AdrLine lines: {text}");
+        assert_honest_wording(&text);
+    }
+
+    #[test]
+    fn remediation_names_ctry_when_only_town_present() {
+        let row = missing_country_row(AddressParty::Creditor);
+        let text = row.remediation().expect("must have remediation text");
+        assert!(text.contains("Ctry"), "text: {text}");
+        assert!(!text.contains("TwnNm"), "text: {text}");
+        assert_honest_wording(&text);
+    }
+
+    #[test]
+    fn remediation_names_both_when_neither_present() {
+        let row = missing_both_row(AddressParty::Debtor);
+        let text = row.remediation().expect("must have remediation text");
+        assert!(text.contains("TwnNm"), "text: {text}");
+        assert!(text.contains("Ctry"), "text: {text}");
+        assert_honest_wording(&text);
+    }
+
+    #[test]
+    fn remediation_some_for_no_address() {
+        let row = no_address_row(AddressParty::Creditor);
+        let text = row.remediation().expect("must have remediation text");
+        assert!(text.contains("PstlAdr"), "text: {text}");
+        assert_honest_wording(&text);
+    }
+
+    #[test]
+    fn verdict_str_matches_mcp_tool_strings() {
+        assert_eq!(verdict_str(&AddressVerdict::Compliant), "compliant");
+        assert_eq!(
+            verdict_str(&AddressVerdict::MissingStructured {
+                town_name_present: false,
+                country_present: true,
+                unstructured_lines: 1,
+            }),
+            "missing_structured"
+        );
+        assert_eq!(verdict_str(&AddressVerdict::NoAddress), "no_address");
+    }
+
+    #[cfg(feature = "json")]
+    mod json_tests {
+        use super::*;
+
+        #[test]
+        fn to_json_null_town_name_on_missing_town_row() {
+            let report = AddressComplianceReport {
+                rows: vec![
+                    missing_town_row(AddressParty::Debtor),
+                    compliant_row(AddressParty::Creditor),
+                ],
+                message_type: "pacs.008.001.08",
+            };
+            let json = report.to_json();
+            assert_eq!(json["message_type"], "pacs.008.001.08");
+            assert_eq!(json["compliant"], false);
+
+            let debtor = &json["rows"][0];
+            assert_eq!(debtor["party"], "debtor");
+            assert_eq!(debtor["verdict"], "missing_structured");
+            assert!(debtor["town_name"].is_null());
+            assert_eq!(debtor["country"], "GB");
+            assert_eq!(debtor["unstructured_lines"], 2);
+            assert!(
+                debtor["remediation"].is_string(),
+                "remediation must be non-null string: {debtor:?}"
+            );
+            let remediation_text = debtor["remediation"].as_str().unwrap();
+            assert_honest_wording(remediation_text);
+        }
+
+        #[test]
+        fn to_json_compliant_true_on_all_compliant_report() {
+            let report = AddressComplianceReport {
+                rows: vec![
+                    compliant_row(AddressParty::Debtor),
+                    compliant_row(AddressParty::Creditor),
+                ],
+                message_type: "pacs.003.001.08",
+            };
+            let json = report.to_json();
+            assert_eq!(json["compliant"], true);
+            for row in json["rows"].as_array().unwrap() {
+                assert_eq!(row["verdict"], "compliant");
+                assert!(row["remediation"].is_null());
+            }
+        }
+
+        #[test]
+        fn to_json_no_address_row_has_null_fields_and_remediation() {
+            let report = AddressComplianceReport {
+                rows: vec![
+                    no_address_row(AddressParty::Debtor),
+                    compliant_row(AddressParty::Creditor),
+                ],
+                message_type: "pain.001.001.09",
+            };
+            let json = report.to_json();
+            let debtor = &json["rows"][0];
+            assert_eq!(debtor["verdict"], "no_address");
+            assert!(debtor["town_name"].is_null());
+            assert!(debtor["country"].is_null());
+            assert_eq!(debtor["unstructured_lines"], 0);
+            assert!(debtor["remediation"].is_string());
+        }
     }
 }

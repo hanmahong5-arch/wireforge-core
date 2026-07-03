@@ -17,3 +17,8 @@ workspace = true
 wf-swift = { path = "../wf-swift", version = "0.1.0" }
 wf-mx = { path = "../wf-mx", version = "0.1.0" }
 wf-codec = { path = "../wf-codec", version = "0.1.0" }
+serde = { version = "1", optional = true, features = ["derive"] }
+serde_json = { version = "1", optional = true }
+
+[features]
+json = ["dep:serde", "dep:serde_json"]

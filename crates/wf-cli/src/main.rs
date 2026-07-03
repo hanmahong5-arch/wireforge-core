@@ -6,8 +6,8 @@ use wf_cli::{
     build_from_json, ebcdic_decode_hex, ebcdic_encode_text, hex_to_bytes, layout_check_frame,
     layout_check_trace, mt_mx_truncation_diff, mt_mx_truncation_diff_from_wf, mx_address_report,
     oracle_report, oracle_report_from_wf, parse_to_json, parse_to_tree, render_address_scan,
-    render_oracle_scan, select_xml, sm3_digest, swift_parse_to_json, swift_parse_to_tree,
-    OracleEntry, ScanEntry,
+    render_address_scan_csv, render_address_scan_json, render_oracle_scan, select_xml, sm3_digest,
+    swift_parse_to_json, swift_parse_to_tree, OracleEntry, ScanEntry,
 };
 
 /// Wireforge CLI for financial message codecs.
@@ -135,7 +135,21 @@ enum XformCommands {
         /// MX XML file(s), a directory to scan, or `-` for one stdin envelope.
         #[arg(required = true, num_args = 1..)]
         paths: Vec<String>,
+        /// Output format: human tree/summary (default), pretty JSON, or CSV.
+        #[arg(long, value_enum, default_value_t = AddressCheckFormat::Text)]
+        format: AddressCheckFormat,
     },
+}
+
+/// `wf xform address-check --format` values. Default `Text` keeps today's
+/// human-readable output byte-identical; `Json` / `Csv` add machine-readable
+/// output over the same SR2026 batch gate (same [`wf_cli::AddressGate`] and
+/// exit code for the same inputs — see [`run_address_check`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum AddressCheckFormat {
+    Text,
+    Json,
+    Csv,
 }
 
 #[derive(Debug, Subcommand)]
@@ -295,9 +309,19 @@ fn main() -> ExitCode {
     };
     match result {
         Ok(out) => {
-            // println! also flushes on newline; emit and exit with the
-            // command's own code (the address-check gate may be non-zero).
-            println!("{}", out.stdout);
+            // Emit and exit with the command's own code (the address-check
+            // gate may be non-zero). Add a trailing newline only when the body
+            // does not already end with one: text/CSV renderers terminate
+            // their last line themselves (CSV with RFC-4180 CRLF), so an
+            // unconditional `println!` would append a stray LF — a phantom
+            // empty record for a CSV consumer and a mixed CRLF/LF ending.
+            // Machine-clean formats (JSON, parse trees) carry no trailing
+            // newline and still get exactly one here.
+            if out.stdout.ends_with('\n') {
+                print!("{}", out.stdout);
+            } else {
+                println!("{}", out.stdout);
+            }
             out.code
         }
         Err(e) => {
@@ -337,7 +361,9 @@ fn dispatch(command: Commands) -> Result<CmdOutcome, String> {
             wf,
         }) => run_xform_diff(mt_file.as_deref(), mx_file.as_deref(), wf.as_deref())
             .map(CmdOutcome::pass),
-        Commands::Xform(XformCommands::AddressCheck { paths }) => run_address_check(&paths),
+        Commands::Xform(XformCommands::AddressCheck { paths, format }) => {
+            run_address_check(&paths, format)
+        }
         Commands::Oracle(OracleCommands::Check {
             wf,
             req,
@@ -470,7 +496,7 @@ fn run_xform_diff(
 /// every argument is a file path. A per-file read/parse failure is captured
 /// into its [`ScanEntry`] (so one bad file does not abort the batch), then
 /// [`render_address_scan`] folds the verdicts into the diff-style exit code.
-fn run_address_check(paths: &[String]) -> Result<CmdOutcome, String> {
+fn run_address_check(paths: &[String], format: AddressCheckFormat) -> Result<CmdOutcome, String> {
     let entries: Vec<ScanEntry> = if paths.len() == 1 && paths[0] == "-" {
         // Single stdin envelope. A stdin read failure aborts (exit 1); a
         // parse failure is captured below and surfaces as the gate's exit 2.
@@ -522,7 +548,11 @@ fn run_address_check(paths: &[String]) -> Result<CmdOutcome, String> {
             .collect()
     };
 
-    let (body, gate) = render_address_scan(&entries);
+    let (body, gate) = match format {
+        AddressCheckFormat::Text => render_address_scan(&entries),
+        AddressCheckFormat::Json => render_address_scan_json(&entries),
+        AddressCheckFormat::Csv => render_address_scan_csv(&entries),
+    };
     Ok(CmdOutcome {
         stdout: body,
         code: ExitCode::from(gate.code()),

@@ -612,3 +612,28 @@ exit 1; dir(compliant+non-compliant) = compact lines + summary, exit 1; +garbage
 .xml = exit 2 (errors dominate); empty/no-`.xml` dir = `wf: no .xml files …`,
 non-zero; pacs.008 + pacs.004 single-file output byte-identical (no regression).
 Detector-not-certification wording intact on every surface. No commit/push/publish/tag.
+
+## 2026-07-03 — v0.2.0 structured output: JSON/CSV + remediation + 13th MCP tool
+
+Opus-planned workflow, Sonnet-5 workers (4 sequential impl + 4 parallel audit
+lenses + harden), main-loop independently re-gated + binary-smoked.
+
+- wf-xform (json feature, optional serde/serde_json): `AddressRow::remediation()`
+  per-party DETECTOR fix guidance (names missing TwnNm/Ctry, cites AdrLine count
+  + 2026-11-14, explicit "does NOT restructure"); `verdict_str`; feature-gated
+  `AddressComplianceReport::to_json()` canonical row shape (nulls preserved).
+- wf-cli: `address-check --format text|json|csv` (text default byte-identical);
+  JSON has schema_version, CSV is RFC-4180; both share the gate via one tally
+  helper. main.rs: emit trailing `\n` only if body lacks one (fixed CSV phantom
+  trailing record + text double-newline; other cmds unchanged).
+- wf-mcp: single tool now emits remediation via to_json(); 13th tool
+  `wf_mx_address_scan` (batch, same 0/1/2 gate + schema_version, shape-identical
+  to CLI json). Docs/README/user-guide/mcp-integration/CHANGELOG/manifest/
+  server.json synced 12→13 (version/URL/sha left at released 0.1.0).
+- Audit found the MCP-batch schema_version gap (fixed) + a fixture-label nit.
+
+Gate (main-loop rerun): clippy --workspace -D warnings = 0; test --workspace 0
+failed; wf-xform --features json 0 failed. Binary smoke: json valid + exit 2 on
+mixed batch, csv RFC-4180 comma-quoted + clean CRLF ending, no_address
+remediation carries a comma and round-trips. Version bump + tag + publish +
+.mcpb rebuild remain maintainer-gated. No push/publish/tag.

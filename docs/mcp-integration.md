@@ -12,7 +12,7 @@ process can be killed at any time.
 
 ## Tools exposed
 
-The server exposes **12 read-only tools**:
+The server exposes **13 read-only tools**:
 
 | Name                      | Purpose                                                          |
 |---------------------------|------------------------------------------------------------------|
@@ -28,6 +28,7 @@ The server exposes **12 read-only tools**:
 | `wf_sm3`                  | Bytes → SM3 (GB/T 32905) hash digest.                            |
 | `wf_mt_mx_truncation_diff`| Detector: flags fields that would be lost or truncated mapping an MT message toward MX. Reports differences only — it does NOT convert, certify, or assert MT↔MX equivalence/conformance. |
 | `wf_mx_address_compliance` | Check a pacs.008.001.08, pacs.004.001.09, pacs.003.001.08 or pain.001.001.09 debtor/creditor postal address for the CBPR+ SR2026 structured-address requirement (Town Name `TwnNm` + Country `Ctry` in dedicated fields, mandatory 2026-11-14). Auto-detects the message type. A structural presence check against that one rule — DETECTOR, not a full CBPR+ validation and not a certification. |
+| `wf_mx_address_scan`      | Batch variant of `wf_mx_address_compliance`: runs the same SR2026 structured-address presence check over one-or-more MX envelopes and returns a diff-style gate/exit_code summarizing the whole batch. DETECTOR, not a full CBPR+ validation and not a certification. |
 
 ### Limitations of `wf_validate_iso8583`
 

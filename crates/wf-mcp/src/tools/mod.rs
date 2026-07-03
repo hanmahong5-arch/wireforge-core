@@ -4,6 +4,7 @@
 //! into the protocol-level `CallToolResult`.
 
 pub mod address_compliance;
+pub mod address_scan;
 pub mod build;
 pub mod diff;
 pub mod ebcdic_decode;

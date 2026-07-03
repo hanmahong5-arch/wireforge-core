@@ -4,6 +4,28 @@ All notable changes to wireforge-core are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v0.2.0 (target)
+
+### Added
+
+- **`--format text|json|csv`** on `wf xform address-check`: machine-readable
+  SR2026 scan output for CI and data pipelines. `json` carries a
+  `schema_version` field so downstream parsers can detect shape changes;
+  `csv` is RFC-4180 with one row per `(file, party)`. `text` stays the
+  default and unchanged.
+- **Per-party `remediation` guidance** on address-compliance rows (CLI and
+  MCP): actionable, per-party fix hints naming the missing structured
+  field(s) (`TwnNm` / `Ctry`). Detector-only guidance — it does not
+  auto-structure or rewrite the address.
+- **`wf_mx_address_scan`** MCP batch tool: runs the same SR2026
+  structured-address presence check over one-or-more MX envelopes in a
+  single call and returns a diff-style gate summarizing the whole batch
+  (tool count: 12 → 13).
+
+> **Note:** the 13-tool count above is a v0.2.0 change. It requires a
+> version bump plus a `.mcpb` rebuild and MCP Registry republish before
+> release (maintainer-gated).
+
 ## [0.1.0] — unreleased
 
 First public release: a pure-Rust toolkit for financial wire messages, exposed

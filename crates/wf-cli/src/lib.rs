@@ -260,25 +260,7 @@ pub struct ScanEntry {
 pub fn render_address_scan(entries: &[ScanEntry]) -> (String, AddressGate) {
     use std::fmt::Write as _;
 
-    // Tally first so the gate reflects the whole batch regardless of how the
-    // body is rendered below.
-    let mut compliant = 0usize;
-    let mut non_compliant = 0usize;
-    let mut errors = 0usize;
-    for e in entries {
-        match &e.result {
-            Err(_) => errors += 1,
-            Ok(report) if report.all_compliant() => compliant += 1,
-            Ok(_) => non_compliant += 1,
-        }
-    }
-    let gate = if errors > 0 {
-        AddressGate::HadErrors
-    } else if non_compliant > 0 {
-        AddressGate::FoundNonCompliant
-    } else {
-        AddressGate::AllCompliant
-    };
+    let (compliant, non_compliant, errors, gate) = tally_address_scan(entries);
 
     // Single input: keep the original single-file experience exactly.
     if entries.len() == 1 {
@@ -330,6 +312,183 @@ pub fn render_address_scan(entries: &[ScanEntry]) -> (String, AddressGate) {
     );
     let _ = writeln!(out, "scope: {ADDRESS_SCOPE}");
     (out, gate)
+}
+
+/// Tally a batch of [`ScanEntry`] into `(compliant, non_compliant, errors,
+/// gate)`. The single source of truth for the SR2026 gate rule (any `Err`
+/// dominates → [`AddressGate::HadErrors`]; else any non-compliant report →
+/// [`AddressGate::FoundNonCompliant`]; else [`AddressGate::AllCompliant`]), so
+/// [`render_address_scan`], [`render_address_scan_json`] and
+/// [`render_address_scan_csv`] cannot disagree on the gate for the same
+/// entries.
+fn tally_address_scan(entries: &[ScanEntry]) -> (usize, usize, usize, AddressGate) {
+    let mut compliant = 0usize;
+    let mut non_compliant = 0usize;
+    let mut errors = 0usize;
+    for e in entries {
+        match &e.result {
+            Err(_) => errors += 1,
+            Ok(report) if report.all_compliant() => compliant += 1,
+            Ok(_) => non_compliant += 1,
+        }
+    }
+    let gate = if errors > 0 {
+        AddressGate::HadErrors
+    } else if non_compliant > 0 {
+        AddressGate::FoundNonCompliant
+    } else {
+        AddressGate::AllCompliant
+    };
+    (compliant, non_compliant, errors, gate)
+}
+
+/// Render a batch of [`ScanEntry`] as the same SR2026 gate in machine-readable
+/// JSON, alongside the [`AddressGate`] the batch implies (identical to
+/// [`render_address_scan`]'s gate for the same entries — both derive from
+/// [`tally_address_scan`]).
+///
+/// Shape: `{ "schema_version": "1.0", "tool": "wf xform address-check",
+/// "scope": <ADDRESS_SCOPE>, "gate": "all_compliant"|"found_non_compliant"|
+/// "had_errors", "exit_code": 0|1|2, "summary": {"scanned","compliant",
+/// "non_compliant","errors"}, "results": [ per-entry ] }`. Each ok entry
+/// merges in `report.to_json()` verbatim (message_type, compliant, rows) so
+/// the row shape is defined once, in wf-xform; an error entry instead carries
+/// `"status": "error"` and `"error": <msg>`.
+pub fn render_address_scan_json(entries: &[ScanEntry]) -> (String, AddressGate) {
+    let (compliant, non_compliant, errors, gate) = tally_address_scan(entries);
+
+    let gate_str = match gate {
+        AddressGate::AllCompliant => "all_compliant",
+        AddressGate::FoundNonCompliant => "found_non_compliant",
+        AddressGate::HadErrors => "had_errors",
+    };
+
+    let results: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|e| match &e.result {
+            Ok(report) => {
+                let mut v = report.to_json();
+                if let serde_json::Value::Object(map) = &mut v {
+                    map.insert("label".to_string(), serde_json::Value::String(e.label.clone()));
+                    map.insert(
+                        "status".to_string(),
+                        serde_json::Value::String("ok".to_string()),
+                    );
+                }
+                v
+            }
+            Err(err) => serde_json::json!({
+                "label": e.label,
+                "status": "error",
+                "error": err,
+            }),
+        })
+        .collect();
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0",
+        "tool": "wf xform address-check",
+        "scope": ADDRESS_SCOPE,
+        "gate": gate_str,
+        "exit_code": gate.code(),
+        "summary": {
+            "scanned": entries.len(),
+            "compliant": compliant,
+            "non_compliant": non_compliant,
+            "errors": errors,
+        },
+        "results": results,
+    });
+    let body = serde_json::to_string_pretty(&doc)
+        .unwrap_or_else(|e| format!("{{\"error\": \"serialize json: {e}\"}}"));
+    (body, gate)
+}
+
+/// Render a batch of [`ScanEntry`] as RFC-4180 CSV, alongside the
+/// [`AddressGate`] the batch implies (identical to [`render_address_scan`]'s
+/// gate for the same entries — both derive from [`tally_address_scan`]).
+///
+/// Header: `file,status,message_type,party,verdict,town_name,country,
+/// unstructured_lines,remediation`. One row per `(file, party)` for an ok
+/// entry (built from `report.to_json()`'s rows — the row shape is not
+/// re-derived here); one row per error entry (`status=error`, the error text
+/// in the `remediation` column, other data cells empty). No summary/footer
+/// line.
+pub fn render_address_scan_csv(entries: &[ScanEntry]) -> (String, AddressGate) {
+    use std::fmt::Write as _;
+
+    let (_compliant, _non_compliant, _errors, gate) = tally_address_scan(entries);
+
+    let mut out = String::new();
+    out.push_str(
+        "file,status,message_type,party,verdict,town_name,country,unstructured_lines,remediation\r\n",
+    );
+    for e in entries {
+        match &e.result {
+            Ok(report) => {
+                let json = report.to_json();
+                let message_type = json
+                    .get("message_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let rows = json.get("rows").and_then(|v| v.as_array());
+                if let Some(rows) = rows {
+                    for row in rows {
+                        let party = json_str_field(row, "party");
+                        let verdict = json_str_field(row, "verdict");
+                        let town_name = json_str_field(row, "town_name");
+                        let country = json_str_field(row, "country");
+                        let unstructured_lines = row
+                            .get("unstructured_lines")
+                            .map(|v| v.to_string())
+                            .unwrap_or_default();
+                        let remediation = json_str_field(row, "remediation");
+                        let _ = writeln!(
+                            out,
+                            "{},{},{},{},{},{},{},{},{}\r",
+                            csv_field(&e.label),
+                            csv_field("ok"),
+                            csv_field(message_type),
+                            csv_field(&party),
+                            csv_field(&verdict),
+                            csv_field(&town_name),
+                            csv_field(&country),
+                            csv_field(&unstructured_lines),
+                            csv_field(&remediation),
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                let _ = writeln!(
+                    out,
+                    "{},{},,,,,,,{}\r",
+                    csv_field(&e.label),
+                    csv_field("error"),
+                    csv_field(err),
+                );
+            }
+        }
+    }
+    (out, gate)
+}
+
+/// Read a row field as a string, `""` for JSON `null` / missing / non-string.
+fn json_str_field(row: &serde_json::Value, key: &str) -> String {
+    row.get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// RFC-4180 quote a single CSV field: quoted (inner `"` doubled) iff it
+/// contains a comma, double-quote, CR, or LF.
+fn csv_field(value: &str) -> String {
+    if value.contains(['"', ',', '\r', '\n']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 /// Filter a set of names to `*.xml` (case-insensitive) and return them sorted.

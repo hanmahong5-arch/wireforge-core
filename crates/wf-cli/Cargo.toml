@@ -21,7 +21,7 @@ workspace = true
 wf-bitmap = { path = "../wf-bitmap", version = "0.1.0" }
 wf-codec = { path = "../wf-codec", version = "0.1.0" }
 wf-sm = { path = "../wf-sm", version = "0.1.0" }
-wf-xform = { path = "../wf-xform", version = "0.1.0" }
+wf-xform = { path = "../wf-xform", version = "0.1.0", features = ["json"] }
 wf-mx = { path = "../wf-mx", version = "0.1.0" }
 wf-swift = { path = "../wf-swift", version = "0.1.0" }
 wf-format = { path = "../wf-format", version = "0.1.0" }

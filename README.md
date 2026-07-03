@@ -19,7 +19,7 @@
 ## What is this?
 
 Wireforge is a **local-first toolkit for financial wire messages** — a CLI
-(`wf`), an AI-agent server (`wf-mcp`, 12 read-only MCP tools), and the Rust
+(`wf`), an AI-agent server (`wf-mcp`, 13 read-only MCP tools), and the Rust
 crates underneath. It exists because four problems keep landing on payment
 teams' desks:
 
@@ -136,9 +136,16 @@ diff-style code so the check drops straight into CI:
 
 One unreadable file does not abort the batch — it is reported and folded into
 the exit code. A directory scan is **one level, `*.xml` only, sorted**
-(recursive scan and a `--format json` machine output are not yet built). This
+(recursive scan is not yet built). This
 is a **structural presence DETECTOR** for the one cited SR2026 rule — **not** a
 full CBPR+ validation and **not** a certification; all fixtures are SYNTHETIC.
+
+`--format text|json|csv` selects the output shape: `text` (default, human-
+readable), `json` (machine-readable, carries a `schema_version` field for CI
+pipelines), or `csv` (RFC-4180, one row per file/party, for spreadsheets and
+data pipelines). Each per-party row also carries a `remediation` field —
+actionable fix guidance naming the missing structured field(s) — a DETECTOR
+hint, not an auto-fix.
 
 ## Quick start (MCP, for AI agents)
 
@@ -165,7 +172,7 @@ to `~/.claude/settings.json`:
 }
 ```
 
-The agent can now call 12 tools:
+The agent can now call 13 tools:
 
 - `wf_parse_iso8583` — hex → structured field tree
 - `wf_build_iso8583` — `{mti, fields}` → hex
@@ -184,6 +191,9 @@ The agent can now call 12 tools:
   pain.001.001.09 debtor/creditor postal address for the CBPR+ SR2026 structured-address
   requirement (`TwnNm` + `Ctry` in dedicated fields, mandatory 2026-11-14); auto-detects the
   message type. DETECTOR, not a full CBPR+ validation and not a certification
+- `wf_mx_address_scan` — batch variant of `wf_mx_address_compliance`: runs the same SR2026
+  structured-address presence check over one-or-more MX envelopes and returns a diff-style
+  gate summarizing the whole batch. DETECTOR, not a full CBPR+ validation and not a certification
 
 See [`docs/mcp-integration.md`](docs/mcp-integration.md) for client
 setup details, the field-payload convention, and validator

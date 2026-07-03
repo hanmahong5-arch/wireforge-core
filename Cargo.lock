@@ -1949,6 +1949,8 @@ version = "0.1.0"
 name = "wf-xform"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "wf-codec",
  "wf-mx",
  "wf-swift",

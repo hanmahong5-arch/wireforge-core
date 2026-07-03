@@ -132,8 +132,59 @@ sr2026-gate:
 
 This is a **structural presence DETECTOR for the one cited SR2026 rule** —
 not a full CBPR+ validation, not a certification. Directory scan is one
-level, `*.xml` only, sorted; machine-readable (`--format json`) output is on
-the roadmap. All fixtures used to validate the checker are SYNTHETIC.
+level, `*.xml` only, sorted. All fixtures used to validate the checker are
+SYNTHETIC.
+
+### Machine-readable output — `--format text|json|csv`
+
+`wf xform address-check` defaults to human-readable `text`. For CI and data
+pipelines, pass `--format json` or `--format csv`:
+
+```bash
+wf xform address-check outbox/ --format json > report.json
+wf xform address-check outbox/ --format csv  > report.csv
+```
+
+`json` carries a `schema_version` field so downstream parsers can detect
+shape changes:
+
+```json
+{
+  "schema_version": "1.0",
+  "tool": "wf xform address-check",
+  "gate": "found_non_compliant",
+  "exit_code": 1,
+  "summary": { "scanned": 1, "compliant": 0, "non_compliant": 1, "errors": 0 },
+  "results": [
+    {
+      "label": "payment.xml",
+      "status": "ok",
+      "message_type": "pacs.008.001.08",
+      "compliant": false,
+      "rows": [
+        {
+          "party": "debtor",
+          "verdict": "missing_structured",
+          "remediation": "The debtor address is missing the structured TwnNm field(s); ..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+`csv` is RFC-4180, one row per `(file, party)`:
+
+```csv
+file,status,message_type,party,verdict,town_name,country,unstructured_lines,remediation
+payment.xml,ok,pacs.008.001.08,debtor,missing_structured,,,1,"The debtor address is missing..."
+```
+
+Every per-party row — in all three formats — carries a **`remediation`**
+field: actionable, per-party fix guidance naming which structured field(s)
+(`TwnNm` / `Ctry`) are absent and what to do about it. This is DETECTOR fix
+*guidance*, not an auto-fix — the checker never restructures, converts, or
+rewrites the address itself.
 
 ---
 
@@ -168,7 +219,7 @@ amount, settlement currency — each capped against cited standard lengths.
 
 ## 5. Use it from an AI agent (MCP)
 
-`wf-mcp` exposes the same engine as **12 read-only MCP tools** — no network
+`wf-mcp` exposes the same engine as **13 read-only MCP tools** — no network
 access, no side effects, message bytes stay on your machine.
 
 **Claude Desktop** (easiest): download
@@ -189,7 +240,8 @@ and register it:
 Then just ask, in plain language:
 
 > "Check every pacs.008 in this folder for SR2026 address compliance and
-> summarize what fails." — the agent batches `wf_mx_address_compliance`
+> summarize what fails." — the agent calls `wf_mx_address_scan` (batch) or
+> batches `wf_mx_address_compliance` (single-message) per file
 >
 > "Parse this ISO 8583 hex and explain field 39." — `wf_parse_iso8583` +
 > `wf_explain_message` + `wf_field_lookup`

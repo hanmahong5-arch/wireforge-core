@@ -21,6 +21,9 @@
 //!   check (TwnNm + Ctry in pacs.008.001.08 / pacs.004.001.09 / pacs.003.001.08
 //!   / pain.001.001.09; auto-detects the message type; NOT a full CBPR+
 //!   validation)
+//! - `wf_mx_address_scan` — batch variant of `wf_mx_address_compliance` over
+//!   one-or-more envelopes, with a diff-style gate/exit_code summarizing the
+//!   whole batch (NOT a full CBPR+ validation, NOT a certification)
 //!
 //! ## Why this crate relaxes three workspace lints
 //!
@@ -212,6 +215,28 @@ impl WireforgeServer {
     ) -> ToolOut {
         run("wf_mx_address_compliance", move || {
             tools::address_compliance::handle(req)
+        })
+    }
+
+    #[tool(
+        description = "Batch structural CBPR+ SR2026 address-compliance check: runs the same \
+        presence check as wf_mx_address_compliance (Town Name / Ctry in dedicated structured \
+        fields, mandatory 2026-11-14) over one or more pacs.008.001.08, pacs.004.001.09, \
+        pacs.003.001.08 or pain.001.001.09 envelopes supplied as `messages` (each an optional \
+        `label` plus the raw MX XML `mx`), auto-detecting each message's type. Returns a \
+        `note` stating the scope, a diff-style `gate` (all_compliant/found_non_compliant/\
+        had_errors) and matching `exit_code` (0/1/2) summarizing the whole batch, a `summary` \
+        of scanned/compliant/non_compliant/errors counts, and a `results` array — one entry \
+        per message, each either `{label, status: \"ok\", message_type, compliant, rows}` or \
+        `{label, status: \"error\", error}`. This is a presence check against that one SR2026 \
+        rule, NOT a full CBPR+ validation and NOT a certification."
+    )]
+    fn wf_mx_address_scan(
+        &self,
+        Parameters(req): Parameters<tools::address_scan::Request>,
+    ) -> ToolOut {
+        run("wf_mx_address_scan", move || {
+            tools::address_scan::handle(req)
         })
     }
 }
